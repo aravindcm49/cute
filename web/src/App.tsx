@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Markdown from "react-markdown";
 
-type Screen = "folder" | "processing" | "results" | "verification";
+type Screen = "folder" | "processing" | "results" | "verification" | "summary";
 
 type ImageEntry = {
   name: string;
@@ -28,6 +28,13 @@ type VerificationItem = {
   reprocessing: boolean;
 };
 
+type StatusEntryFromApi = {
+  processingStatus: string;
+  reviewStatus: ReviewStatus;
+  currentVersion: number;
+  verifiedAt?: string;
+};
+
 export default function App() {
   const [screen, setScreen] = useState<Screen>("folder");
   const [folderPath, setFolderPath] = useState("");
@@ -43,6 +50,11 @@ export default function App() {
   // Verification state
   const [verificationItems, setVerificationItems] = useState<VerificationItem[]>([]);
   const [verificationIndex, setVerificationIndex] = useState(0);
+
+  // Summary state
+  const [summaryStatusEntries, setSummaryStatusEntries] = useState<
+    Array<{ name: string; entry: StatusEntryFromApi }>
+  >([]);
 
   const canRun = images.length > 0 && loadState === "success";
   const hasCompleted = processingState === "done";
@@ -212,11 +224,11 @@ export default function App() {
   async function handleUpdateReviewStatus(imageName: string, newStatus: ReviewStatus) {
     try {
       const res = await fetch(
-        `/api/status/${encodeURIComponent(imageName)}?folder=${encodeURIComponent(folderPath)}`,
+        `/api/review/${encodeURIComponent(imageName)}`,
         {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ reviewStatus: newStatus }),
+          body: JSON.stringify({ folder: folderPath, reviewStatus: newStatus }),
         }
       );
 
@@ -293,6 +305,52 @@ export default function App() {
 
   function handleVerificationNext() {
     setVerificationIndex((prev) => Math.min(verificationItems.length - 1, prev + 1));
+  }
+
+  // Check if all items are verified and auto-show summary
+  const allVerified = useMemo(() => {
+    return (
+      verificationItems.length > 0 &&
+      verificationItems.every((item) => item.reviewStatus === "verified")
+    );
+  }, [verificationItems]);
+
+  async function handleShowSummary() {
+    try {
+      const res = await fetch(`/api/status?folder=${encodeURIComponent(folderPath)}`);
+      if (!res.ok) {
+        setScreen("summary");
+        return;
+      }
+      const payload = await res.json();
+      const statusMap = payload.status as Record<string, StatusEntryFromApi>;
+
+      const entries = Object.entries(statusMap).map(([filePath, entry]) => ({
+        name: filePath.split("/").pop() ?? filePath,
+        entry,
+      }));
+
+      setSummaryStatusEntries(entries);
+    } catch {
+      // Best-effort
+    }
+    setScreen("summary");
+  }
+
+  function handleNewSession() {
+    setFolderPath("");
+    setImages([]);
+    setLoadState("idle");
+    setErrorMessage(null);
+    setProcessingEntries([]);
+    setProcessingState("idle");
+    setActivityLog([]);
+    setProcessingError(null);
+    setCurrentFile(null);
+    setVerificationItems([]);
+    setVerificationIndex(0);
+    setSummaryStatusEntries([]);
+    setScreen("folder");
   }
 
   function updateEntry(name: string, updates: Partial<ProcessingEntry>) {
@@ -656,21 +714,93 @@ export default function App() {
                     <button type="button" className="secondary" onClick={handleReset}>
                       Back to Folder
                     </button>
+                    {allVerified && (
+                      <button
+                        type="button"
+                        className="primary"
+                        onClick={() => void handleShowSummary()}
+                      >
+                        View Summary
+                      </button>
+                    )}
                   </div>
                 </>
               );
             })()
-          ) : (
-            <>
-              <h2>Results</h2>
-              <p className="muted">Results screen stub. Next slice will add verification.</p>
-              <div className="button-row">
-                <button type="button" className="secondary" onClick={handleReset}>
-                  Back to Folder
-                </button>
-              </div>
-            </>
-          )}
+          ) : screen === "summary" ? (
+            (() => {
+              const verifiedCount = summaryStatusEntries.filter(
+                (e) => e.entry.reviewStatus === "verified"
+              ).length;
+              const needsImprovementCount = summaryStatusEntries.filter(
+                (e) => e.entry.reviewStatus === "needs-improvement"
+              ).length;
+              const totalCount = summaryStatusEntries.length;
+              const csvUrl = `/api/csv?folder=${encodeURIComponent(folderPath)}`;
+
+              return (
+                <>
+                  <h2>Summary</h2>
+                  <p className="muted">All items have been reviewed.</p>
+
+                  <div className="summary-stats">
+                    <div className="summary-stat">
+                      <span className="summary-stat-value">{totalCount}</span>
+                      <span className="summary-stat-label">Total Processed</span>
+                    </div>
+                    <div className="summary-stat">
+                      <span className="summary-stat-value summary-verified">{verifiedCount}</span>
+                      <span className="summary-stat-label">Verified</span>
+                    </div>
+                    <div className="summary-stat">
+                      <span className="summary-stat-value summary-needs-improvement">
+                        {needsImprovementCount}
+                      </span>
+                      <span className="summary-stat-label">Needs Improvement</span>
+                    </div>
+                  </div>
+
+                  <div className="summary-files">
+                    <h3>Transcription Files</h3>
+                    <ul>
+                      {summaryStatusEntries.map((item) => {
+                        const baseName = item.name.replace(/\.[^.]+$/, "");
+                        const version = item.entry.currentVersion;
+                        const fileName =
+                          version > 1 ? `${baseName}_v${version}.md` : `${baseName}.md`;
+                        return (
+                          <li key={item.name}>
+                            <span>{fileName}</span>
+                            <span
+                              className={`review-pill review-${item.entry.reviewStatus}`}
+                            >
+                              {item.entry.reviewStatus.replace("-", " ")}
+                            </span>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+
+                  <div className="button-row">
+                    <a href={csvUrl} className="csv-download-link" download>
+                      Download CSV
+                    </a>
+                    <button
+                      type="button"
+                      className="secondary"
+                      onClick={handleStartVerification}
+                    >
+                      Return to Verification
+                    </button>
+                    <button type="button" className="secondary" onClick={handleNewSession}>
+                      New Session
+                    </button>
+                  </div>
+                </>
+              );
+            })()
+          ) : null}
         </section>
       )}
     </div>
