@@ -1,0 +1,9 @@
+{
+  "dependencies": {
+    "@lmstudio/sdk": "^1.5.0",
+    "zod": "^3.22.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.2"
+  }
+}

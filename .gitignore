@@ -1,0 +1,8 @@
+node_modules/
+transcriptions/
+misc/
+docs/
+dist/
+*.json
+!package.json
+*.md
