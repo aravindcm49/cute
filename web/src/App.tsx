@@ -507,7 +507,12 @@ export default function App() {
           </div>
 
           <div className="status">
-            {loadState === "loading" && <p>Scanning folder...</p>}
+            {loadState === "loading" && (
+              <p className="loading-indicator">
+                <span className="spinner" />
+                Scanning folder...
+              </p>
+            )}
             {loadState === "error" && errorMessage && <p className="error">{errorMessage}</p>}
             {loadState === "success" && (
               <p>
@@ -520,10 +525,10 @@ export default function App() {
             {displayList.map((name) => (
               <li key={name}>{name}</li>
             ))}
-            {loadState === "success" && images.length === 0 && (
-              <li className="muted">No images found in this folder.</li>
-            )}
           </ul>
+          {loadState === "success" && images.length === 0 && (
+            <div className="empty-state">No images found in this folder.</div>
+          )}
         </section>
       ) : (
         <section className="panel">
@@ -562,7 +567,12 @@ export default function App() {
                 <div className="log-panel">
                   <h3>Live Log</h3>
                   <div className="log-lines">
-                    {activityLog.length === 0 && <p className="muted">Waiting for updates...</p>}
+                    {activityLog.length === 0 && (
+                      <p className="loading-indicator muted">
+                        <span className="spinner" />
+                        Waiting for updates...
+                      </p>
+                    )}
                     {activityLog.map((line, index) => (
                       <p key={`${line}-${index}`}>{line}</p>
                     ))}
@@ -650,7 +660,10 @@ export default function App() {
                       <h3>Transcription</h3>
                       <div className="transcription-content">
                         {current.transcriptionLoading && (
-                          <p className="muted">Loading transcription...</p>
+                          <p className="loading-indicator muted">
+                            <span className="spinner" />
+                            Loading transcription...
+                          </p>
                         )}
                         {current.transcriptionError && (
                           <p className="error">{current.transcriptionError}</p>
@@ -701,7 +714,13 @@ export default function App() {
                           onClick={() => handleReprocess(current.name)}
                           disabled={current.reprocessing}
                         >
-                          {current.reprocessing ? "Re-processing..." : "Re-process"}
+                          {current.reprocessing ? (
+                            <>
+                              <span className="spinner" /> Re-processing...
+                            </>
+                          ) : (
+                            "Re-process"
+                          )}
                         </button>
                       )}
                     </div>
@@ -762,24 +781,28 @@ export default function App() {
 
                   <div className="summary-files">
                     <h3>Transcription Files</h3>
-                    <ul>
-                      {summaryStatusEntries.map((item) => {
-                        const baseName = item.name.replace(/\.[^.]+$/, "");
-                        const version = item.entry.currentVersion;
-                        const fileName =
-                          version > 1 ? `${baseName}_v${version}.md` : `${baseName}.md`;
-                        return (
-                          <li key={item.name}>
-                            <span>{fileName}</span>
-                            <span
-                              className={`review-pill review-${item.entry.reviewStatus}`}
-                            >
-                              {item.entry.reviewStatus.replace("-", " ")}
-                            </span>
-                          </li>
-                        );
-                      })}
-                    </ul>
+                    {summaryStatusEntries.length === 0 ? (
+                      <div className="empty-state">No status data available.</div>
+                    ) : (
+                      <ul>
+                        {summaryStatusEntries.map((item) => {
+                          const baseName = item.name.replace(/\.[^.]+$/, "");
+                          const version = item.entry.currentVersion;
+                          const fileName =
+                            version > 1 ? `${baseName}_v${version}.md` : `${baseName}.md`;
+                          return (
+                            <li key={item.name}>
+                              <span>{fileName}</span>
+                              <span
+                                className={`review-pill review-${item.entry.reviewStatus}`}
+                              >
+                                {item.entry.reviewStatus.replace("-", " ")}
+                              </span>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
                   </div>
 
                   <div className="button-row">

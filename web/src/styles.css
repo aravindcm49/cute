@@ -57,6 +57,7 @@ body {
   padding: 28px;
   box-shadow: 0 20px 60px rgba(45, 35, 25, 0.15);
   backdrop-filter: blur(12px);
+  animation: fadeIn 0.25s ease-out;
 }
 
 .field {
@@ -112,6 +113,11 @@ button:disabled {
 .error {
   color: #a14f3d;
   font-weight: 600;
+  background: #fff0ed;
+  border: 1px solid #e8c4bc;
+  border-left: 4px solid #a14f3d;
+  border-radius: 8px;
+  padding: 10px 14px;
 }
 
 .image-list {
@@ -519,5 +525,105 @@ button:disabled {
 @media (max-width: 720px) {
   .summary-stats {
     flex-direction: column;
+  }
+}
+
+/* Animations */
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2.5px solid #d0c4b6;
+  border-top-color: #5b4c40;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  vertical-align: middle;
+}
+
+.spinner-lg {
+  width: 24px;
+  height: 24px;
+  border-width: 3px;
+}
+
+.loading-indicator {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Empty state */
+
+.empty-state {
+  text-align: center;
+  padding: 28px 16px;
+  color: #6a5d4f;
+  font-size: 0.95rem;
+}
+
+/* Summary file names */
+
+.summary-files li span:first-child {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  min-width: 0;
+}
+
+/* Tablet breakpoint */
+
+@media (max-width: 960px) {
+  .verification-split {
+    grid-template-columns: 1fr;
+  }
+
+  .processing-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .app-shell:has(.verification-split) {
+    max-width: 880px;
+  }
+}
+
+/* Mobile refinements */
+
+@media (max-width: 720px) {
+  button {
+    padding: 12px 20px;
+  }
+
+  .csv-download-link {
+    padding: 12px 20px;
+  }
+
+  .verification-transcription {
+    max-height: 400px;
+  }
+
+  .verification-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .verification-actions .button-row {
+    justify-content: center;
   }
 }
