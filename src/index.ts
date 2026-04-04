@@ -53,10 +53,10 @@ async function main() {
     filesToProcess = imageFiles;
     console.log(`Mode: ALL - processing ${filesToProcess.length} image(s) from scratch.\n`);
   } else if (mode === "errors-only") {
-    filesToProcess = imageFiles.filter((f) => status[f]?.status === "error");
+    filesToProcess = imageFiles.filter((f: string) => status[f]?.status === "error");
     console.log(`Mode: ERRORS-ONLY - processing ${filesToProcess.length} errored image(s).\n`);
   } else {
-    filesToProcess = imageFiles.filter((f) => {
+    filesToProcess = imageFiles.filter((f: string) => {
       const s = status[f];
       return !s || s.status !== "completed";
     });

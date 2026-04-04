@@ -1,0 +1,136 @@
+@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&display=swap");
+
+:root {
+  color-scheme: light;
+  font-family: "Space Grotesk", "Segoe UI", sans-serif;
+  background: radial-gradient(circle at top, #f4f0ea, #e6e0d7 45%, #d8d0c5 100%);
+  color: #1f1f1f;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: transparent;
+}
+
+.app-shell {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 48px 24px 72px;
+}
+
+.app-header {
+  margin-bottom: 32px;
+}
+
+.app-eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  font-size: 0.7rem;
+  font-weight: 600;
+  margin: 0 0 12px;
+  color: #5b4c40;
+}
+
+.app-header h1 {
+  font-size: clamp(2rem, 3vw, 2.7rem);
+  margin: 0 0 12px;
+}
+
+.app-subtitle {
+  margin: 0;
+  color: #4a4036;
+  max-width: 600px;
+}
+
+.panel {
+  background: rgba(255, 255, 255, 0.78);
+  border-radius: 24px;
+  padding: 28px;
+  box-shadow: 0 20px 60px rgba(45, 35, 25, 0.15);
+  backdrop-filter: blur(12px);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-weight: 600;
+  color: #3f352b;
+}
+
+.field input {
+  border-radius: 14px;
+  border: 1px solid #d0c4b6;
+  padding: 12px 14px;
+  font-size: 1rem;
+  background: #fffdfb;
+}
+
+.button-row {
+  display: flex;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+button {
+  border: none;
+  border-radius: 999px;
+  padding: 10px 20px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+button.primary {
+  background: #1f1f1f;
+  color: #fef7ee;
+}
+
+button.secondary {
+  background: #f0e7dd;
+  color: #3f352b;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.status {
+  margin-top: 18px;
+}
+
+.error {
+  color: #a14f3d;
+  font-weight: 600;
+}
+
+.image-list {
+  list-style: none;
+  padding: 0;
+  margin: 18px 0 0;
+  display: grid;
+  gap: 8px;
+}
+
+.image-list li {
+  background: #fff7ee;
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-size: 0.95rem;
+}
+
+.muted {
+  color: #6a5d4f;
+}
+
+@media (max-width: 720px) {
+  .button-row {
+    flex-direction: column;
+  }
+}

@@ -1,9 +1,32 @@
 {
+  "type": "module",
   "dependencies": {
+    "@ai-hero/sandcastle": "^0.2.1",
     "@lmstudio/sdk": "^1.5.0",
+    "express": "^4.19.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
     "zod": "^3.22.0"
   },
+  "scripts": {
+    "dev:server": "tsx watch server/index.ts",
+    "dev:web": "vite --config web/vite.config.ts",
+    "dev": "concurrently -k \"npm:dev:server\" \"npm:dev:web\"",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p web/tsconfig.json --noEmit",
+    "test": "vitest run",
+    "sandcastle": "npx tsx .sandcastle/main.ts"
+  },
   "devDependencies": {
-    "@types/node": "^25.5.2"
+    "@types/express": "^4.17.21",
+    "@types/node": "^25.5.2",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.1",
+    "concurrently": "^8.2.2",
+    "node-mocks-http": "^1.14.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.2",
+    "vite": "^5.4.8",
+    "vitest": "^2.1.1"
   }
 }

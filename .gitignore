@@ -5,4 +5,8 @@ docs/
 dist/
 *.json
 !package.json
+!package-lock.json
+!tsconfig.json
+!tsconfig.*.json
+!web/tsconfig.json
 *.md
