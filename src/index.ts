@@ -53,12 +53,12 @@ async function main() {
     filesToProcess = imageFiles;
     console.log(`Mode: ALL - processing ${filesToProcess.length} image(s) from scratch.\n`);
   } else if (mode === "errors-only") {
-    filesToProcess = imageFiles.filter((f: string) => status[f]?.status === "error");
+    filesToProcess = imageFiles.filter((f: string) => status[f]?.processingStatus === "error");
     console.log(`Mode: ERRORS-ONLY - processing ${filesToProcess.length} errored image(s).\n`);
   } else {
     filesToProcess = imageFiles.filter((f: string) => {
       const s = status[f];
-      return !s || s.status !== "completed";
+      return !s || s.processingStatus !== "completed";
     });
     console.log(`Mode: PENDING - processing ${filesToProcess.length} pending image(s).\n`);
   }
@@ -83,7 +83,7 @@ async function main() {
       break;
     }
 
-    if (mode === "pending" && status[imagePath]?.status === "completed") {
+    if (mode === "pending" && status[imagePath]?.processingStatus === "completed") {
       console.log(`[${i + 1}/${filesToProcess.length}] [SKIP] ${imageName} (already completed)`);
       skipped++;
       continue;
