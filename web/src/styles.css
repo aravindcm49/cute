@@ -125,6 +125,112 @@ button:disabled {
   font-size: 0.95rem;
 }
 
+.processing-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.processing-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+  gap: 20px;
+  margin-top: 16px;
+}
+
+.processing-list ul {
+  list-style: none;
+  padding: 0;
+  margin: 12px 0 0;
+  display: grid;
+  gap: 10px;
+}
+
+.processing-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: #fff7ee;
+  border: 1px solid rgba(150, 125, 105, 0.2);
+}
+
+.processing-list li strong {
+  display: block;
+}
+
+.processing-list li .detail {
+  display: block;
+  font-size: 0.85rem;
+  color: #6a5d4f;
+  margin-top: 4px;
+  word-break: break-word;
+}
+
+.status-pill {
+  text-transform: capitalize;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #e4d6c8;
+  color: #4a4036;
+  white-space: nowrap;
+}
+
+.status-processing .status-pill {
+  background: #1f1f1f;
+  color: #fef7ee;
+}
+
+.status-completed .status-pill {
+  background: #2f6b4b;
+  color: #f5fff7;
+}
+
+.status-error .status-pill {
+  background: #a14f3d;
+  color: #fff3f0;
+}
+
+.status-skipped .status-pill {
+  background: #b2a193;
+  color: #fffdfb;
+}
+
+.status-pending .status-pill {
+  background: #f0e7dd;
+  color: #3f352b;
+}
+
+.log-panel {
+  background: rgba(250, 247, 242, 0.9);
+  border-radius: 18px;
+  padding: 16px;
+  border: 1px solid rgba(150, 125, 105, 0.2);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.5);
+}
+
+.log-lines {
+  max-height: 320px;
+  overflow: auto;
+  font-family: "Space Grotesk", "Segoe UI", sans-serif;
+  font-size: 0.85rem;
+  line-height: 1.4;
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.log-lines p {
+  margin: 0;
+  word-break: break-word;
+}
+
 .muted {
   color: #6a5d4f;
 }
@@ -132,5 +238,14 @@ button:disabled {
 @media (max-width: 720px) {
   .button-row {
     flex-direction: column;
+  }
+
+  .processing-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .processing-grid {
+    grid-template-columns: 1fr;
   }
 }

@@ -22,12 +22,27 @@ export async function createTranscriptionClient(): Promise<{ client: LMStudioCli
 export async function transcribeImage(
   client: LMStudioClient,
   model: LLM,
-  imagePath: string
+  imagePath: string,
+  onProgress?: (msg: string) => void
 ): Promise<TranscriptionResult> {
   const image = await client.files.prepareImage(imagePath);
 
   let totalTokens = 0;
   const startTime = Date.now();
+
+  const emit = (message: string) => {
+    process.stdout.write(message);
+    if (onProgress) {
+      onProgress(message);
+    }
+  };
+
+  const emitLine = (message: string) => {
+    console.log(message);
+    if (onProgress) {
+      onProgress(message);
+    }
+  };
 
   const prediction = model.respond(
     [
@@ -52,37 +67,37 @@ Important:
       maxTokens: config.maxTokens,
       onPromptProcessingProgress: (progress) => {
         const pct = (progress * 100).toFixed(0);
-        process.stdout.write(`\r  [Prompt processing: ${pct}%]`);
+        emit(`\r  [Prompt processing: ${pct}%]`);
       },
       onFirstToken: () => {
-        process.stdout.write(`\r  [Prompt processing: 100%]\n`);
-        process.stdout.write(`  [Generating tokens: `);
+        emit(`\r  [Prompt processing: 100%]\n`);
+        emit(`  [Generating tokens: `);
       },
     },
   );
 
   for await (const { content, tokensCount } of prediction) {
     totalTokens += tokensCount;
-    process.stdout.write(content);
+    emit(content);
   }
-  process.stdout.write("]\n");
+  emit("]\n");
 
   const result = await prediction.result();
   const elapsed = ((Date.now() - startTime) / 1000).toFixed(2);
 
-  console.log(`  [Stats: ${totalTokens} tokens, ${elapsed}s`);
+  emitLine(`  [Stats: ${totalTokens} tokens, ${elapsed}s`);
   if (result.stats?.tokensPerSecond) {
-    console.log(`   ${result.stats.tokensPerSecond.toFixed(2)} tokens/sec`);
+    emitLine(`   ${result.stats.tokensPerSecond.toFixed(2)} tokens/sec`);
   }
   if (result.stats?.stopReason) {
-    console.log(`   Stop: ${result.stats.stopReason}]`);
+    emitLine(`   Stop: ${result.stats.stopReason}]`);
   } else {
-    console.log(`]`);
+    emitLine(`]`);
   }
 
   const transcription = result.parsed;
   const mdPath = saveTranscriptionAsMarkdown(imagePath, transcription);
-  console.log(`  [Saved: ${mdPath}]`);
+  emitLine(`  [Saved: ${mdPath}]`);
 
   return transcription;
 }
