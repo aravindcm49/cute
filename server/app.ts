@@ -9,6 +9,7 @@ import {
   saveStatusFile,
   saveVersionedTranscription,
   updateFileStatus,
+  updateReviewStatus,
   type StatusFile,
 } from "../src/storage";
 import { createTranscriptionClient, getImageFiles, transcribeImage } from "../src/transcription";
@@ -29,6 +30,35 @@ function isDirectory(folderPath: string): boolean {
   } catch (error) {
     return false;
   }
+}
+
+function escapeCsvField(value: string): string {
+  if (value.includes(",") || value.includes('"') || value.includes("\n")) {
+    return `"${value.replace(/"/g, '""')}"`;
+  }
+  return value;
+}
+
+function generateTrackingCsv(status: StatusFile): string {
+  const header = "image_name,processing_status,review_status,version,verified_at,notes";
+  const rows = Object.entries(status).map(([filePath, entry]) => {
+    const imageName = path.basename(filePath);
+    return [
+      escapeCsvField(imageName),
+      escapeCsvField(entry.processingStatus),
+      escapeCsvField(entry.reviewStatus),
+      String(entry.currentVersion),
+      entry.verifiedAt ?? "",
+      "",
+    ].join(",");
+  });
+  return [header, ...rows].join("\n") + "\n";
+}
+
+function writeTrackingCsv(folder: string, status: StatusFile): void {
+  const csvPath = path.join(folder, "transcription-tracking.csv");
+  const csv = generateTrackingCsv(status);
+  fs.writeFileSync(csvPath, csv, "utf-8");
 }
 
 export function createTranscribeHandler(deps: TranscriptionDeps) {
@@ -514,6 +544,83 @@ export function createApp(overrides: Partial<TranscriptionDeps> = {}) {
     res.setHeader("Content-Type", contentType);
     const fileBuffer = fs.readFileSync(imagePath);
     return res.send(fileBuffer);
+  });
+
+  app.patch("/api/review/:imageName", (req, res) => {
+    const folder = typeof req.body?.folder === "string" ? req.body.folder : "";
+    if (folder.trim().length === 0) {
+      return res.status(400).json({ error: "Folder path is required." });
+    }
+
+    if (!fs.existsSync(folder)) {
+      return res.status(404).json({ error: "Folder not found." });
+    }
+
+    if (!isDirectory(folder)) {
+      return res.status(400).json({ error: "Provided path is not a directory." });
+    }
+
+    const imageName = req.params.imageName;
+    if (typeof imageName !== "string" || imageName.trim().length === 0) {
+      return res.status(400).json({ error: "Image name is required." });
+    }
+
+    if (imageName !== path.basename(imageName)) {
+      return res.status(400).json({ error: "Invalid image name." });
+    }
+
+    const { reviewStatus } = req.body ?? {};
+    if (reviewStatus === undefined) {
+      return res.status(400).json({ error: "reviewStatus is required." });
+    }
+
+    if (!reviewStatuses.has(reviewStatus)) {
+      return res.status(400).json({ error: "Invalid reviewStatus value." });
+    }
+
+    const imagePath = path.join(folder, imageName);
+    const statusFilePath = path.join(folder, config.statusFile);
+    const status = loadStatusFile(statusFilePath);
+    ensureStatusEntry(status, imagePath);
+
+    updateReviewStatus(status, imagePath, reviewStatus, statusFilePath);
+    writeTrackingCsv(folder, status);
+
+    return res.json({ folder, imagePath, status: status[imagePath] });
+  });
+
+  app.get("/api/csv", (req, res) => {
+    const folder = typeof req.query.folder === "string" ? req.query.folder : "";
+    if (folder.trim().length === 0) {
+      return res.status(400).json({ error: "Query parameter 'folder' is required." });
+    }
+
+    if (!fs.existsSync(folder)) {
+      return res.status(404).json({ error: "Folder not found." });
+    }
+
+    if (!isDirectory(folder)) {
+      return res.status(400).json({ error: "Provided path is not a directory." });
+    }
+
+    const imagePaths = listImages(folder);
+    const statusFilePath = path.join(folder, config.statusFile);
+    const status = loadStatusFile(statusFilePath);
+
+    // Ensure all images have status entries
+    for (const imagePath of imagePaths) {
+      if (!status[imagePath]) {
+        status[imagePath] = createDefaultStatusEntry();
+      } else {
+        status[imagePath] = ensureStatusEntry(status, imagePath);
+      }
+    }
+
+    const csv = generateTrackingCsv(status);
+
+    res.setHeader("Content-Type", "text/csv");
+    res.setHeader("Content-Disposition", "attachment; filename=transcription-tracking.csv");
+    return res.send(csv);
   });
 
   app.post("/api/transcribe", createTranscribeHandler(deps));
