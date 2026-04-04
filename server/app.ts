@@ -7,6 +7,7 @@ import {
   ensureStatusEntry,
   loadStatusFile,
   saveStatusFile,
+  saveVersionedTranscription,
   updateFileStatus,
   type StatusFile,
 } from "../src/storage";
@@ -161,6 +162,77 @@ export function createTranscribeHandler(deps: TranscriptionDeps) {
       errors,
       results,
     });
+  };
+}
+
+export function createReprocessHandler(deps: TranscriptionDeps) {
+  return async (req: express.Request, res: express.Response) => {
+    const { createTranscriptionClient: createClient, transcribeImage: runTranscription } = deps;
+
+    const folder = typeof req.body?.folder === "string" ? req.body.folder : "";
+    if (folder.trim().length === 0) {
+      return res.status(400).json({ error: "Folder path is required." });
+    }
+
+    if (!fs.existsSync(folder)) {
+      return res.status(404).json({ error: "Folder not found." });
+    }
+
+    if (!isDirectory(folder)) {
+      return res.status(400).json({ error: "Provided path is not a directory." });
+    }
+
+    const imageName = req.params.imageName;
+    if (typeof imageName !== "string" || imageName.trim().length === 0) {
+      return res.status(400).json({ error: "Image name is required." });
+    }
+
+    if (imageName !== path.basename(imageName)) {
+      return res.status(400).json({ error: "Invalid image name." });
+    }
+
+    const imagePath = path.join(folder, imageName);
+    if (!fs.existsSync(imagePath)) {
+      return res.status(404).json({ error: "Image not found." });
+    }
+
+    const statusFilePath = path.join(folder, config.statusFile);
+    const status = loadStatusFile(statusFilePath);
+    const entry = ensureStatusEntry(status, imagePath);
+    const currentVersion = entry.currentVersion;
+    const nextVersion = currentVersion + 1;
+
+    try {
+      const { client, model } = await createClient();
+      const result = await runTranscription(client, model, imagePath);
+
+      saveVersionedTranscription(folder, imagePath, nextVersion, result);
+
+      entry.currentVersion = nextVersion;
+      entry.reviewStatus = "not-verified";
+      entry.processingStatus = "completed";
+      entry.completedAt = new Date().toISOString();
+      delete entry.error;
+      delete entry.verifiedAt;
+      saveStatusFile(status, statusFilePath);
+
+      return res.json({
+        imageName,
+        version: nextVersion,
+        status: entry,
+      });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      entry.error = errorMessage;
+      saveStatusFile(status, statusFilePath);
+
+      return res.status(500).json({
+        error: errorMessage,
+        imageName,
+        version: currentVersion,
+        status: entry,
+      });
+    }
   };
 }
 
@@ -445,6 +517,7 @@ export function createApp(overrides: Partial<TranscriptionDeps> = {}) {
   });
 
   app.post("/api/transcribe", createTranscribeHandler(deps));
+  app.post("/api/reprocess/:imageName", createReprocessHandler(deps));
 
   return app;
 }

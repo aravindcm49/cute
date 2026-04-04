@@ -144,7 +144,39 @@ export function saveTranscriptionAsMarkdown(
   const imageName = path.basename(imagePath, path.extname(imagePath));
   const mdPath = path.join(config.outputDir, `${imageName}.md`);
 
-  const content = `# ${path.basename(imagePath)}
+  const content = formatTranscriptionMarkdown(imagePath, transcription);
+  fs.writeFileSync(mdPath, content, "utf-8");
+  return mdPath;
+}
+
+export function saveVersionedTranscription(
+  folder: string,
+  imagePath: string,
+  version: number,
+  transcription: {
+    description: string;
+    textContent: string;
+    keyInformation: string[];
+  }
+): string {
+  const baseName = path.basename(imagePath, path.extname(imagePath));
+  const fileName = version > 1 ? `${baseName}_v${version}.md` : `${baseName}.md`;
+  const mdPath = path.join(folder, fileName);
+
+  const content = formatTranscriptionMarkdown(imagePath, transcription);
+  fs.writeFileSync(mdPath, content, "utf-8");
+  return mdPath;
+}
+
+function formatTranscriptionMarkdown(
+  imagePath: string,
+  transcription: {
+    description: string;
+    textContent: string;
+    keyInformation: string[];
+  }
+): string {
+  return `# ${path.basename(imagePath)}
 
 ## Description
 
@@ -158,7 +190,4 @@ ${transcription.textContent}
 
 ${transcription.keyInformation.map((item) => `- ${item}`).join("\n")}
 `;
-
-  fs.writeFileSync(mdPath, content, "utf-8");
-  return mdPath;
 }
