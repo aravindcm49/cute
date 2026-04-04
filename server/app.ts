@@ -351,6 +351,99 @@ export function createApp(overrides: Partial<TranscriptionDeps> = {}) {
     return res.json({ folder, imagePath, status: entry });
   });
 
+  app.get("/api/transcription/:imageName", (req, res) => {
+    const folder = typeof req.query.folder === "string" ? req.query.folder : "";
+    if (folder.trim().length === 0) {
+      return res.status(400).json({ error: "Query parameter 'folder' is required." });
+    }
+
+    if (!fs.existsSync(folder)) {
+      return res.status(404).json({ error: "Folder not found." });
+    }
+
+    if (!isDirectory(folder)) {
+      return res.status(400).json({ error: "Provided path is not a directory." });
+    }
+
+    const imageName = req.params.imageName;
+    if (typeof imageName !== "string" || imageName.trim().length === 0) {
+      return res.status(400).json({ error: "Image name is required." });
+    }
+
+    if (imageName !== path.basename(imageName)) {
+      return res.status(400).json({ error: "Invalid image name." });
+    }
+
+    const baseName = path.basename(imageName, path.extname(imageName));
+
+    // Check status file for version info
+    const statusFilePath = path.join(folder, config.statusFile);
+    const status = fs.existsSync(statusFilePath) ? loadStatusFile(statusFilePath) : {};
+    const imagePath = path.join(folder, imageName);
+    const entry = status[imagePath];
+    const version = entry?.currentVersion ?? 1;
+
+    // Try versioned file first (e.g., slide_001_v2.md), then base file (slide_001.md)
+    let mdPath: string;
+    if (version > 1) {
+      mdPath = path.join(folder, `${baseName}_v${version}.md`);
+      if (!fs.existsSync(mdPath)) {
+        mdPath = path.join(folder, `${baseName}.md`);
+      }
+    } else {
+      mdPath = path.join(folder, `${baseName}.md`);
+    }
+
+    if (!fs.existsSync(mdPath)) {
+      return res.status(404).json({ error: "Transcription not found for this image." });
+    }
+
+    const content = fs.readFileSync(mdPath, "utf-8");
+    return res.json({ imageName, content, version });
+  });
+
+  app.get("/api/image/:imageName", (req, res) => {
+    const folder = typeof req.query.folder === "string" ? req.query.folder : "";
+    if (folder.trim().length === 0) {
+      return res.status(400).json({ error: "Query parameter 'folder' is required." });
+    }
+
+    if (!fs.existsSync(folder)) {
+      return res.status(404).json({ error: "Folder not found." });
+    }
+
+    if (!isDirectory(folder)) {
+      return res.status(400).json({ error: "Provided path is not a directory." });
+    }
+
+    const imageName = req.params.imageName;
+    if (typeof imageName !== "string" || imageName.trim().length === 0) {
+      return res.status(400).json({ error: "Image name is required." });
+    }
+
+    if (imageName !== path.basename(imageName)) {
+      return res.status(400).json({ error: "Invalid image name." });
+    }
+
+    const imagePath = path.join(folder, imageName);
+    if (!fs.existsSync(imagePath)) {
+      return res.status(404).json({ error: "Image not found." });
+    }
+
+    const ext = path.extname(imageName).toLowerCase();
+    const mimeTypes: Record<string, string> = {
+      ".jpg": "image/jpeg",
+      ".jpeg": "image/jpeg",
+      ".png": "image/png",
+      ".webp": "image/webp",
+    };
+    const contentType = mimeTypes[ext] ?? "application/octet-stream";
+
+    res.setHeader("Content-Type", contentType);
+    const fileBuffer = fs.readFileSync(imagePath);
+    return res.send(fileBuffer);
+  });
+
   app.post("/api/transcribe", createTranscribeHandler(deps));
 
   return app;

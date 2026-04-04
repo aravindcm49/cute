@@ -1,6 +1,7 @@
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import Markdown from "react-markdown";
 
-type Screen = "folder" | "processing" | "results";
+type Screen = "folder" | "processing" | "results" | "verification";
 
 type ImageEntry = {
   name: string;
@@ -9,12 +10,22 @@ type ImageEntry = {
 
 type LoadState = "idle" | "loading" | "success" | "error";
 type ProcessingStatus = "pending" | "processing" | "completed" | "error" | "skipped";
+type ReviewStatus = "not-verified" | "verified" | "needs-improvement";
 
 type ProcessingEntry = {
   name: string;
   status: ProcessingStatus;
   detail?: string;
   error?: string;
+};
+
+type VerificationItem = {
+  name: string;
+  reviewStatus: ReviewStatus;
+  transcriptionContent: string | null;
+  transcriptionLoading: boolean;
+  transcriptionError: string | null;
+  reprocessing: boolean;
 };
 
 export default function App() {
@@ -28,6 +39,10 @@ export default function App() {
   const [activityLog, setActivityLog] = useState<string[]>([]);
   const [processingError, setProcessingError] = useState<string | null>(null);
   const [currentFile, setCurrentFile] = useState<string | null>(null);
+
+  // Verification state
+  const [verificationItems, setVerificationItems] = useState<VerificationItem[]>([]);
+  const [verificationIndex, setVerificationIndex] = useState(0);
 
   const canRun = images.length > 0 && loadState === "success";
   const hasCompleted = processingState === "done";
@@ -89,6 +104,195 @@ export default function App() {
 
   function handleViewResults() {
     setScreen("results");
+  }
+
+  function handleStartVerification() {
+    const items: VerificationItem[] = images.map((img) => ({
+      name: img.name,
+      reviewStatus: "not-verified",
+      transcriptionContent: null,
+      transcriptionLoading: false,
+      transcriptionError: null,
+      reprocessing: false,
+    }));
+    setVerificationItems(items);
+    setVerificationIndex(0);
+    setScreen("verification");
+  }
+
+  const loadTranscription = useCallback(
+    async (imageName: string) => {
+      setVerificationItems((prev) =>
+        prev.map((item) =>
+          item.name === imageName
+            ? { ...item, transcriptionLoading: true, transcriptionError: null }
+            : item
+        )
+      );
+
+      try {
+        const res = await fetch(
+          `/api/transcription/${encodeURIComponent(imageName)}?folder=${encodeURIComponent(folderPath)}`
+        );
+        const payload = await res.json();
+
+        if (!res.ok) {
+          throw new Error(payload.error || "Failed to load transcription.");
+        }
+
+        setVerificationItems((prev) =>
+          prev.map((item) =>
+            item.name === imageName
+              ? { ...item, transcriptionContent: payload.content, transcriptionLoading: false }
+              : item
+          )
+        );
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Failed to load transcription.";
+        setVerificationItems((prev) =>
+          prev.map((item) =>
+            item.name === imageName
+              ? { ...item, transcriptionLoading: false, transcriptionError: message }
+              : item
+          )
+        );
+      }
+    },
+    [folderPath]
+  );
+
+  // Load transcription when verification index changes
+  useEffect(() => {
+    if (screen !== "verification" || verificationItems.length === 0) {
+      return;
+    }
+    const current = verificationItems[verificationIndex];
+    if (current && current.transcriptionContent === null && !current.transcriptionLoading) {
+      void loadTranscription(current.name);
+    }
+  }, [screen, verificationIndex, verificationItems, loadTranscription]);
+
+  // Fetch latest review statuses when entering verification
+  useEffect(() => {
+    if (screen !== "verification" || verificationItems.length === 0) {
+      return;
+    }
+
+    let cancelled = false;
+
+    async function fetchStatuses() {
+      try {
+        const res = await fetch(`/api/status?folder=${encodeURIComponent(folderPath)}`);
+        if (!res.ok) return;
+        const payload = await res.json();
+        const statusMap = payload.status as Record<string, { reviewStatus?: ReviewStatus }>;
+
+        if (cancelled) return;
+
+        setVerificationItems((prev) =>
+          prev.map((item) => {
+            const key = Object.keys(statusMap).find((k) => k.endsWith(`/${item.name}`));
+            if (key && statusMap[key]?.reviewStatus) {
+              return { ...item, reviewStatus: statusMap[key].reviewStatus! };
+            }
+            return item;
+          })
+        );
+      } catch {
+        // Status fetch is best-effort
+      }
+    }
+
+    void fetchStatuses();
+    return () => {
+      cancelled = true;
+    };
+  }, [screen, folderPath, verificationItems.length]);
+
+  async function handleUpdateReviewStatus(imageName: string, newStatus: ReviewStatus) {
+    try {
+      const res = await fetch(
+        `/api/status/${encodeURIComponent(imageName)}?folder=${encodeURIComponent(folderPath)}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ reviewStatus: newStatus }),
+        }
+      );
+
+      if (!res.ok) {
+        const payload = await res.json().catch(() => ({}));
+        throw new Error(payload.error || "Failed to update review status.");
+      }
+
+      setVerificationItems((prev) =>
+        prev.map((item) =>
+          item.name === imageName ? { ...item, reviewStatus: newStatus } : item
+        )
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to update review status.";
+      setVerificationItems((prev) =>
+        prev.map((item) =>
+          item.name === imageName ? { ...item, transcriptionError: message } : item
+        )
+      );
+    }
+  }
+
+  async function handleReprocess(imageName: string) {
+    setVerificationItems((prev) =>
+      prev.map((item) =>
+        item.name === imageName ? { ...item, reprocessing: true, transcriptionError: null } : item
+      )
+    );
+
+    try {
+      const res = await fetch(`/api/reprocess/${encodeURIComponent(imageName)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ folder: folderPath }),
+      });
+
+      if (!res.ok) {
+        const payload = await res.json().catch(() => ({}));
+        throw new Error(payload.error || "Re-processing failed.");
+      }
+
+      // Reload transcription after re-process
+      setVerificationItems((prev) =>
+        prev.map((item) =>
+          item.name === imageName
+            ? {
+                ...item,
+                reprocessing: false,
+                transcriptionContent: null,
+                reviewStatus: "not-verified",
+              }
+            : item
+        )
+      );
+
+      // Trigger reload
+      void loadTranscription(imageName);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Re-processing failed.";
+      setVerificationItems((prev) =>
+        prev.map((item) =>
+          item.name === imageName
+            ? { ...item, reprocessing: false, transcriptionError: message }
+            : item
+        )
+      );
+    }
+  }
+
+  function handleVerificationPrev() {
+    setVerificationIndex((prev) => Math.max(0, prev - 1));
+  }
+
+  function handleVerificationNext() {
+    setVerificationIndex((prev) => Math.min(verificationItems.length - 1, prev + 1));
   }
 
   function updateEntry(name: string, updates: Partial<ProcessingEntry>) {
@@ -314,6 +518,148 @@ export default function App() {
                 </button>
               </div>
             </>
+          ) : screen === "results" ? (
+            <>
+              <h2>Results</h2>
+              <p className="muted">
+                Processing complete. Start verification to review each transcription side-by-side
+                with its source image.
+              </p>
+              <div className="button-row">
+                <button type="button" className="primary" onClick={handleStartVerification}>
+                  Start Verification
+                </button>
+                <button type="button" className="secondary" onClick={handleReset}>
+                  Back to Folder
+                </button>
+              </div>
+            </>
+          ) : screen === "verification" ? (
+            (() => {
+              const current = verificationItems[verificationIndex];
+              if (!current) {
+                return (
+                  <>
+                    <h2>Verification</h2>
+                    <p className="muted">No items to verify.</p>
+                    <div className="button-row">
+                      <button type="button" className="secondary" onClick={handleReset}>
+                        Back to Folder
+                      </button>
+                    </div>
+                  </>
+                );
+              }
+
+              const imageUrl = `/api/image/${encodeURIComponent(current.name)}?folder=${encodeURIComponent(folderPath)}`;
+
+              return (
+                <>
+                  <div className="verification-header">
+                    <h2>Verification</h2>
+                    <span className="verification-position">
+                      {verificationIndex + 1} of {verificationItems.length}
+                    </span>
+                  </div>
+
+                  <div className="verification-nav">
+                    <button
+                      type="button"
+                      className="secondary"
+                      onClick={handleVerificationPrev}
+                      disabled={verificationIndex === 0}
+                    >
+                      Prev
+                    </button>
+                    <span className="verification-filename">{current.name}</span>
+                    <button
+                      type="button"
+                      className="secondary"
+                      onClick={handleVerificationNext}
+                      disabled={verificationIndex === verificationItems.length - 1}
+                    >
+                      Next
+                    </button>
+                  </div>
+
+                  <div className="verification-split">
+                    <div className="verification-image">
+                      <h3>Source Image</h3>
+                      <img src={imageUrl} alt={current.name} />
+                    </div>
+
+                    <div className="verification-transcription">
+                      <h3>Transcription</h3>
+                      <div className="transcription-content">
+                        {current.transcriptionLoading && (
+                          <p className="muted">Loading transcription...</p>
+                        )}
+                        {current.transcriptionError && (
+                          <p className="error">{current.transcriptionError}</p>
+                        )}
+                        {current.transcriptionContent && (
+                          <Markdown>{current.transcriptionContent}</Markdown>
+                        )}
+                        {!current.transcriptionLoading &&
+                          !current.transcriptionError &&
+                          !current.transcriptionContent && (
+                            <p className="muted">No transcription available.</p>
+                          )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="verification-actions">
+                    <div className="verification-status">
+                      <span
+                        className={`review-pill review-${current.reviewStatus}`}
+                      >
+                        {current.reviewStatus.replace("-", " ")}
+                      </span>
+                    </div>
+                    <div className="button-row">
+                      <button
+                        type="button"
+                        className="primary"
+                        onClick={() => handleUpdateReviewStatus(current.name, "verified")}
+                        disabled={current.reviewStatus === "verified"}
+                      >
+                        Verified
+                      </button>
+                      <button
+                        type="button"
+                        className="secondary"
+                        onClick={() =>
+                          handleUpdateReviewStatus(current.name, "needs-improvement")
+                        }
+                        disabled={current.reviewStatus === "needs-improvement"}
+                      >
+                        Needs Improvement
+                      </button>
+                      {current.reviewStatus === "needs-improvement" && (
+                        <button
+                          type="button"
+                          className="secondary"
+                          onClick={() => handleReprocess(current.name)}
+                          disabled={current.reprocessing}
+                        >
+                          {current.reprocessing ? "Re-processing..." : "Re-process"}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="button-row">
+                    <button type="button" className="secondary" onClick={handleViewResults}>
+                      Back to Results
+                    </button>
+                    <button type="button" className="secondary" onClick={handleReset}>
+                      Back to Folder
+                    </button>
+                  </div>
+                </>
+              );
+            })()
           ) : (
             <>
               <h2>Results</h2>
