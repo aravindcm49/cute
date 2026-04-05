@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Markdown from "react-markdown";
 import LiveLog from "./components/LiveLog";
+import { coalesceLogEntry } from "./components/logCoalescing";
 
 type Screen = "folder" | "processing" | "results" | "verification" | "summary";
 
@@ -47,6 +48,7 @@ export default function App() {
   const [activityLog, setActivityLog] = useState<string[]>([]);
   const [processingError, setProcessingError] = useState<string | null>(null);
   const [currentFile, setCurrentFile] = useState<string | null>(null);
+  const lastWasChunkRef = useRef(false);
 
   // Verification state
   const [verificationItems, setVerificationItems] = useState<VerificationItem[]>([]);
@@ -108,6 +110,7 @@ export default function App() {
     setProcessingState("idle");
     setProcessingError(null);
     setCurrentFile(null);
+    lastWasChunkRef.current = false;
     setScreen("processing");
     void startTranscription();
   }
@@ -357,6 +360,7 @@ export default function App() {
     setActivityLog([]);
     setProcessingError(null);
     setCurrentFile(null);
+    lastWasChunkRef.current = false;
     setVerificationItems([]);
     setVerificationIndex(0);
     setSummaryStatusEntries([]);
@@ -369,10 +373,11 @@ export default function App() {
     );
   }
 
-  function appendLog(message: string) {
+  function appendLog(message: string, type: "status" | "chunk" = "status") {
     setActivityLog((prev) => {
-      const next = [...prev, message];
-      return next.length > 200 ? next.slice(-200) : next;
+      const result = coalesceLogEntry(prev, lastWasChunkRef.current, message, type);
+      lastWasChunkRef.current = result.lastWasChunk;
+      return result.log;
     });
   }
 
@@ -414,7 +419,7 @@ export default function App() {
       return;
     }
 
-    appendLog(trimmed);
+    appendLog(trimmed, "chunk");
     if (currentFile) {
       updateEntry(currentFile, { detail: trimmed });
     }
