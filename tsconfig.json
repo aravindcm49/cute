@@ -3,7 +3,7 @@
     "target": "ES2020",
     "module": "ESNext",
     "moduleResolution": "Bundler",
-    "lib": ["ES2020"],
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
     "outDir": "./dist",
     "rootDir": ".",
     "strict": true,
@@ -11,8 +11,9 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
+    "jsx": "react-jsx",
     "types": ["node"]
   },
-  "include": ["src/**/*", "server/**/*", "tests/**/*"],
+  "include": ["src/**/*", "server/**/*", "tests/**/*", "web/**/*"],
   "exclude": ["node_modules"]
 }

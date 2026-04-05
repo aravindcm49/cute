@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Markdown from "react-markdown";
+import LiveLog from "./components/LiveLog";
 
 type Screen = "folder" | "processing" | "results" | "verification" | "summary";
 
@@ -573,20 +574,7 @@ export default function App() {
                   </ul>
                 </div>
 
-                <div className="log-panel">
-                  <h3>Live Log</h3>
-                  <div className="log-lines">
-                    {activityLog.length === 0 && (
-                      <p className="loading-indicator muted">
-                        <span className="spinner" />
-                        Waiting for updates...
-                      </p>
-                    )}
-                    {activityLog.map((line, index) => (
-                      <p key={`${line}-${index}`}>{line}</p>
-                    ))}
-                  </div>
-                </div>
+                <LiveLog entries={activityLog} />
               </div>
 
               <div className="button-row">
