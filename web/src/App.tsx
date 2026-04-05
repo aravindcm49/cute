@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Markdown from "react-markdown";
 
 type Screen = "folder" | "processing" | "results" | "verification" | "summary";
@@ -50,6 +50,7 @@ export default function App() {
   // Verification state
   const [verificationItems, setVerificationItems] = useState<VerificationItem[]>([]);
   const [verificationIndex, setVerificationIndex] = useState(0);
+  const transcriptionRequestedRef = useRef<Set<string>>(new Set());
 
   // Summary state
   const [summaryStatusEntries, setSummaryStatusEntries] = useState<
@@ -127,6 +128,7 @@ export default function App() {
       transcriptionError: null,
       reprocessing: false,
     }));
+    transcriptionRequestedRef.current.clear();
     setVerificationItems(items);
     setVerificationIndex(0);
     setScreen("verification");
@@ -179,7 +181,13 @@ export default function App() {
       return;
     }
     const current = verificationItems[verificationIndex];
-    if (current && current.transcriptionContent === null && !current.transcriptionLoading) {
+    if (
+      current &&
+      current.transcriptionContent === null &&
+      !current.transcriptionLoading &&
+      !transcriptionRequestedRef.current.has(current.name)
+    ) {
+      transcriptionRequestedRef.current.add(current.name);
       void loadTranscription(current.name);
     }
   }, [screen, verificationIndex, verificationItems, loadTranscription]);
@@ -285,7 +293,8 @@ export default function App() {
         )
       );
 
-      // Trigger reload
+      // Allow re-fetch by clearing the guard, then trigger reload
+      transcriptionRequestedRef.current.delete(imageName);
       void loadTranscription(imageName);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Re-processing failed.";

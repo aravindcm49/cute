@@ -162,9 +162,11 @@ export function createTranscribeHandler(deps: TranscriptionDeps) {
       sendSse(`[FILE_START] ${imageName}`);
       try {
         updateFileStatus(status, imagePath, "in_progress", undefined, statusFilePath);
-        await runTranscription(client, model, imagePath, (message) => {
+        const transcription = await runTranscription(client, model, imagePath, (message) => {
           sendSse(message);
         });
+        // Save to the image folder so verification can find it
+        saveVersionedTranscription(folder, imagePath, 1, transcription);
         updateFileStatus(status, imagePath, "completed", undefined, statusFilePath);
         completed++;
         results.push({ imageName, status: "completed" });

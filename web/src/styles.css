@@ -145,7 +145,7 @@ button:disabled {
 
 .processing-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+  grid-template-columns: 1fr;
   gap: 20px;
   margin-top: 16px;
 }
@@ -156,6 +156,8 @@ button:disabled {
   margin: 12px 0 0;
   display: grid;
   gap: 10px;
+  max-height: 300px;
+  overflow-y: auto;
 }
 
 .processing-list li {
@@ -253,10 +255,6 @@ button:disabled {
   .processing-header {
     flex-direction: column;
     align-items: flex-start;
-  }
-
-  .processing-grid {
-    grid-template-columns: 1fr;
   }
 
   .verification-split {
@@ -591,10 +589,6 @@ button:disabled {
 
 @media (max-width: 960px) {
   .verification-split {
-    grid-template-columns: 1fr;
-  }
-
-  .processing-grid {
     grid-template-columns: 1fr;
   }
 
