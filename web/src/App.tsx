@@ -2,32 +2,24 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Markdown from "react-markdown";
 import LiveLog from "./components/LiveLog";
 import { coalesceLogEntry } from "./components/logCoalescing";
+import {
+  applyReviewStatuses,
+  buildVerificationItems,
+  findFirstUnverifiedIndex,
+  type ImageEntry,
+  type ReviewStatus,
+  type VerificationItem,
+} from "./verification";
 
-type Screen = "folder" | "processing" | "results" | "verification" | "summary";
-
-type ImageEntry = {
-  name: string;
-  path: string;
-};
+type Screen = "folder" | "processing" | "verification" | "summary";
 
 type LoadState = "idle" | "loading" | "success" | "error";
 type ProcessingStatus = "pending" | "processing" | "completed" | "error" | "skipped";
-type ReviewStatus = "not-verified" | "verified" | "needs-improvement";
-
 type ProcessingEntry = {
   name: string;
   status: ProcessingStatus;
   detail?: string;
   error?: string;
-};
-
-type VerificationItem = {
-  name: string;
-  reviewStatus: ReviewStatus;
-  transcriptionContent: string | null;
-  transcriptionLoading: boolean;
-  transcriptionError: string | null;
-  reprocessing: boolean;
 };
 
 type StatusEntryFromApi = {
@@ -119,22 +111,27 @@ export default function App() {
     setScreen("folder");
   }
 
-  function handleViewResults() {
-    setScreen("results");
+  function handleBackToProcessing() {
+    setScreen("processing");
   }
 
-  function handleStartVerification() {
-    const items: VerificationItem[] = images.map((img) => ({
-      name: img.name,
-      reviewStatus: "not-verified",
-      transcriptionContent: null,
-      transcriptionLoading: false,
-      transcriptionError: null,
-      reprocessing: false,
-    }));
+  async function handleStartVerification() {
+    let statusMap: Record<string, { reviewStatus?: ReviewStatus }> | undefined;
+
+    try {
+      const res = await fetch(`/api/status?folder=${encodeURIComponent(folderPath)}`);
+      if (res.ok) {
+        const payload = await res.json();
+        statusMap = payload.status as Record<string, { reviewStatus?: ReviewStatus }>;
+      }
+    } catch {
+      // Best-effort status prefetch
+    }
+
+    const items = buildVerificationItems(images, statusMap);
     transcriptionRequestedRef.current.clear();
     setVerificationItems(items);
-    setVerificationIndex(0);
+    setVerificationIndex(findFirstUnverifiedIndex(items));
     setScreen("verification");
   }
 
@@ -213,15 +210,7 @@ export default function App() {
 
         if (cancelled) return;
 
-        setVerificationItems((prev) =>
-          prev.map((item) => {
-            const key = Object.keys(statusMap).find((k) => k.endsWith(`/${item.name}`));
-            if (key && statusMap[key]?.reviewStatus) {
-              return { ...item, reviewStatus: statusMap[key].reviewStatus! };
-            }
-            return item;
-          })
-        );
+        setVerificationItems((prev) => applyReviewStatuses(prev, statusMap));
       } catch {
         // Status fetch is best-effort
       }
@@ -554,14 +543,17 @@ export default function App() {
                   <h2>Processing</h2>
                   <p className="muted">Streaming live progress from the transcription engine.</p>
                 </div>
-                {hasCompleted && (
-                  <button type="button" className="primary" onClick={handleViewResults}>
-                    View Results
-                  </button>
-                )}
               </div>
 
               {processingError && <p className="error">{processingError}</p>}
+
+              {hasCompleted && (
+                <div className="processing-cta">
+                  <button type="button" className="primary" onClick={() => void handleStartVerification()}>
+                    Start Verification
+                  </button>
+                </div>
+              )}
 
               <div className="processing-grid">
                 <div className="processing-list">
@@ -583,22 +575,6 @@ export default function App() {
               </div>
 
               <div className="button-row">
-                <button type="button" className="secondary" onClick={handleReset}>
-                  Back to Folder
-                </button>
-              </div>
-            </>
-          ) : screen === "results" ? (
-            <>
-              <h2>Results</h2>
-              <p className="muted">
-                Processing complete. Start verification to review each transcription side-by-side
-                with its source image.
-              </p>
-              <div className="button-row">
-                <button type="button" className="primary" onClick={handleStartVerification}>
-                  Start Verification
-                </button>
                 <button type="button" className="secondary" onClick={handleReset}>
                   Back to Folder
                 </button>
@@ -729,8 +705,8 @@ export default function App() {
                   </div>
 
                   <div className="button-row">
-                    <button type="button" className="secondary" onClick={handleViewResults}>
-                      Back to Results
+                    <button type="button" className="secondary" onClick={handleBackToProcessing}>
+                      Back to Processing
                     </button>
                     <button type="button" className="secondary" onClick={handleReset}>
                       Back to Folder
@@ -814,7 +790,7 @@ export default function App() {
                     <button
                       type="button"
                       className="secondary"
-                      onClick={handleStartVerification}
+                      onClick={() => void handleStartVerification()}
                     >
                       Return to Verification
                     </button>

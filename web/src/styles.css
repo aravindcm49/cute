@@ -143,6 +143,14 @@ button:disabled {
   margin-bottom: 16px;
 }
 
+.processing-cta {
+  margin: 12px 0 4px;
+}
+
+.processing-cta button {
+  width: 100%;
+}
+
 .processing-grid {
   display: grid;
   grid-template-columns: 1fr;
