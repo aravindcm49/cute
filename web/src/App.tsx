@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Markdown from "react-markdown";
 import LiveLog from "./components/LiveLog";
+import ImageHoverZoom from "./components/ImageHoverZoom";
 import { coalesceLogEntry } from "./components/logCoalescing";
 import {
   applyReviewStatuses,
@@ -631,7 +632,7 @@ export default function App() {
                   <div className="verification-split">
                     <div className="verification-image">
                       <h3>Source Image</h3>
-                      <img src={imageUrl} alt={current.name} />
+                      <ImageHoverZoom src={imageUrl} alt={current.name} />
                     </div>
 
                     <div className="verification-transcription">
