@@ -1,8 +1,14 @@
-import { describe, it, expect } from "vitest";
+import { afterEach, describe, it, expect, vi } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import {
   getBackgroundPosition,
   getMagnifierPosition,
+  default as ImageHoverZoom,
 } from "../../web/src/components/ImageHoverZoom";
+
+afterEach(() => {
+  cleanup();
+});
 
 describe("ImageHoverZoom helpers", () => {
   it("positions magnifier to the right when there is space", () => {
@@ -57,5 +63,37 @@ describe("ImageHoverZoom helpers", () => {
 
     expect(position.x).toBeCloseTo(-425);
     expect(position.y).toBeCloseTo(-175);
+  });
+});
+
+describe("ImageHoverZoom", () => {
+  it("calls onExpand when clicking the expand button", () => {
+    const onExpand = vi.fn();
+    render(
+      <ImageHoverZoom src="/test.jpg" alt="Preview" onExpand={onExpand} />
+    );
+
+    const expandButton = screen.getByRole("button", {
+      name: "Open fullscreen preview",
+    });
+    fireEvent.click(expandButton);
+
+    expect(onExpand).toHaveBeenCalledTimes(1);
+  });
+
+  it("calls onExpand when pressing the F key", () => {
+    const onExpand = vi.fn();
+    render(
+      <ImageHoverZoom
+        src="/test.jpg"
+        alt="Preview"
+        onExpand={onExpand}
+        enableFullscreenShortcut={true}
+      />
+    );
+
+    fireEvent.keyDown(document, { key: "f" });
+
+    expect(onExpand).toHaveBeenCalledTimes(1);
   });
 });

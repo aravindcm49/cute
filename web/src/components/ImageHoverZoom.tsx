@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { CSSProperties, MouseEvent } from "react";
 
 type ImageHoverZoomProps = {
@@ -6,6 +6,8 @@ type ImageHoverZoomProps = {
   alt: string;
   zoom?: number;
   magnifierSize?: number;
+  onExpand?: () => void;
+  enableFullscreenShortcut?: boolean;
 };
 
 type MagnifierPositionParams = {
@@ -68,6 +70,8 @@ export default function ImageHoverZoom({
   alt,
   zoom = DEFAULT_ZOOM,
   magnifierSize = DEFAULT_MAGNIFIER_SIZE,
+  onExpand,
+  enableFullscreenShortcut = false,
 }: ImageHoverZoomProps) {
   const [isActive, setIsActive] = useState(false);
   const [cursor, setCursor] = useState<{
@@ -76,6 +80,26 @@ export default function ImageHoverZoom({
     width: number;
     height: number;
   } | null>(null);
+
+  useEffect(() => {
+    if (!onExpand || !enableFullscreenShortcut) {
+      return;
+    }
+
+    const handleExpand = onExpand;
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "f" || event.key === "F") {
+        event.preventDefault();
+        handleExpand();
+      }
+    }
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [onExpand, enableFullscreenShortcut]);
 
   const handleMouseMove = (event: MouseEvent<HTMLImageElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -128,6 +152,25 @@ export default function ImageHoverZoom({
         onMouseEnter={handleMouseMove}
         onMouseLeave={handleMouseLeave}
       />
+      {onExpand && (
+        <button
+          type="button"
+          className="image-expand-button"
+          onClick={onExpand}
+          aria-label="Open fullscreen preview"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path
+              d="M9 3H3v6M3 3l7 7M15 3h6v6M21 3l-7 7M9 21H3v-6M3 21l7-7M15 21h6v-6M21 21l-7-7"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </button>
+      )}
       {showMagnifier && <div className="image-hover-magnifier" style={magnifierStyles} />}
     </div>
   );

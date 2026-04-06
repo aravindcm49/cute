@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Markdown from "react-markdown";
 import LiveLog from "./components/LiveLog";
 import ImageHoverZoom from "./components/ImageHoverZoom";
+import FullscreenImageModal from "./components/FullscreenImageModal";
 import { coalesceLogEntry } from "./components/logCoalescing";
 import {
   applyReviewStatuses,
@@ -42,6 +43,7 @@ export default function App() {
   const [processingError, setProcessingError] = useState<string | null>(null);
   const [currentFile, setCurrentFile] = useState<string | null>(null);
   const lastWasChunkRef = useRef(false);
+  const [isFullscreenOpen, setIsFullscreenOpen] = useState(false);
 
   // Verification state
   const [verificationItems, setVerificationItems] = useState<VerificationItem[]>([]);
@@ -59,6 +61,20 @@ export default function App() {
   const displayList = useMemo(() => {
     return images.map((image) => image.name);
   }, [images]);
+
+  const openFullscreen = useCallback(() => {
+    setIsFullscreenOpen(true);
+  }, []);
+
+  const closeFullscreen = useCallback(() => {
+    setIsFullscreenOpen(false);
+  }, []);
+
+  useEffect(() => {
+    if (screen !== "verification") {
+      setIsFullscreenOpen(false);
+    }
+  }, [screen]);
 
   async function handleScan() {
     if (!folderPath.trim()) {
@@ -632,7 +648,12 @@ export default function App() {
                   <div className="verification-split">
                     <div className="verification-image">
                       <h3>Source Image</h3>
-                      <ImageHoverZoom src={imageUrl} alt={current.name} />
+                      <ImageHoverZoom
+                        src={imageUrl}
+                        alt={current.name}
+                        onExpand={openFullscreen}
+                        enableFullscreenShortcut={true}
+                      />
                     </div>
 
                     <div className="verification-transcription">
@@ -658,6 +679,13 @@ export default function App() {
                       </div>
                     </div>
                   </div>
+
+                  <FullscreenImageModal
+                    src={imageUrl}
+                    alt={current.name}
+                    isOpen={isFullscreenOpen}
+                    onClose={closeFullscreen}
+                  />
 
                   <div className="verification-actions">
                     <div className="verification-status">
