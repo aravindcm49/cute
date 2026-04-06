@@ -499,8 +499,8 @@ export default function App() {
   return (
     <div className="app-shell">
       <header className="app-header">
-        <p className="app-eyebrow">Transcription Review</p>
-        <h1>Sandcastle Transcription UI</h1>
+        <p className="app-eyebrow">Curate Transcription Experience</p>
+        <h1>Cute</h1>
         <p className="app-subtitle">
           Point the app at a folder of slides, verify the images found, then run transcription.
         </p>
