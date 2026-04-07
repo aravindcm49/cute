@@ -1,9 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Markdown from "react-markdown";
-import LiveLog from "./components/LiveLog";
 import ImageHoverZoom from "./components/ImageHoverZoom";
 import FullscreenImageModal from "./components/FullscreenImageModal";
-import { coalesceLogEntry } from "./components/logCoalescing";
 import {
   applyReviewStatuses,
   buildVerificationItems,
@@ -39,10 +37,10 @@ export default function App() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [processingEntries, setProcessingEntries] = useState<ProcessingEntry[]>([]);
   const [processingState, setProcessingState] = useState<"idle" | "running" | "done">("idle");
-  const [activityLog, setActivityLog] = useState<string[]>([]);
   const [processingError, setProcessingError] = useState<string | null>(null);
   const [currentFile, setCurrentFile] = useState<string | null>(null);
-  const lastWasChunkRef = useRef(false);
+  const currentFileRef = useRef<string | null>(null);
+  const recentChunksRef = useRef<string[]>([]);
   const [isFullscreenOpen, setIsFullscreenOpen] = useState(false);
 
   // Verification state
@@ -115,11 +113,11 @@ export default function App() {
         status: "pending",
       }))
     );
-    setActivityLog([]);
     setProcessingState("idle");
     setProcessingError(null);
     setCurrentFile(null);
-    lastWasChunkRef.current = false;
+    currentFileRef.current = null;
+    recentChunksRef.current = [];
     setScreen("processing");
     void startTranscription();
   }
@@ -363,10 +361,10 @@ export default function App() {
     setErrorMessage(null);
     setProcessingEntries([]);
     setProcessingState("idle");
-    setActivityLog([]);
     setProcessingError(null);
     setCurrentFile(null);
-    lastWasChunkRef.current = false;
+    currentFileRef.current = null;
+    recentChunksRef.current = [];
     setVerificationItems([]);
     setVerificationIndex(0);
     setSummaryStatusEntries([]);
@@ -379,14 +377,6 @@ export default function App() {
     );
   }
 
-  function appendLog(message: string, type: "status" | "chunk" = "status") {
-    setActivityLog((prev) => {
-      const result = coalesceLogEntry(prev, lastWasChunkRef.current, message, type);
-      lastWasChunkRef.current = result.lastWasChunk;
-      return result.log;
-    });
-  }
-
   function handleStreamMessage(message: string) {
     const trimmed = message.trim();
     if (!trimmed) {
@@ -396,22 +386,25 @@ export default function App() {
     if (trimmed.startsWith("[FILE_START]")) {
       const name = trimmed.replace("[FILE_START]", "").trim();
       setCurrentFile(name);
+      currentFileRef.current = name;
+      recentChunksRef.current = [];
       updateEntry(name, { status: "processing", detail: "Starting transcription..." });
-      appendLog(`Starting ${name}`);
       return;
     }
 
     if (trimmed.startsWith("[FILE_DONE]")) {
       const name = trimmed.replace("[FILE_DONE]", "").trim();
-      updateEntry(name, { status: "completed", detail: "Completed" });
-      appendLog(`Completed ${name}`);
+      currentFileRef.current = null;
+      recentChunksRef.current = [];
+      updateEntry(name, { status: "completed", detail: undefined });
       return;
     }
 
     if (trimmed.startsWith("[FILE_SKIP]")) {
       const name = trimmed.replace("[FILE_SKIP]", "").trim();
-      updateEntry(name, { status: "skipped", detail: "Skipped (already completed)" });
-      appendLog(`Skipped ${name}`);
+      currentFileRef.current = null;
+      recentChunksRef.current = [];
+      updateEntry(name, { status: "skipped", detail: undefined });
       return;
     }
 
@@ -420,14 +413,17 @@ export default function App() {
       const [namePart, errorPart] = payload.split("|");
       const name = namePart?.trim() ?? "Unknown file";
       const error = errorPart?.trim() ?? "Unknown error";
+      currentFileRef.current = null;
+      recentChunksRef.current = [];
       updateEntry(name, { status: "error", error, detail: error });
-      appendLog(`Error ${name}: ${error}`);
       return;
     }
 
-    appendLog(trimmed, "chunk");
-    if (currentFile) {
-      updateEntry(currentFile, { detail: trimmed });
+    const activeFile = currentFileRef.current;
+    if (activeFile) {
+      // Keep last 3 chunks for context
+      recentChunksRef.current = [...recentChunksRef.current.slice(-2), trimmed];
+      updateEntry(activeFile, { detail: recentChunksRef.current.join(" ") });
     }
   }
 
@@ -490,7 +486,6 @@ export default function App() {
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to run transcription.";
       setProcessingError(message);
-      appendLog(message);
     } finally {
       setProcessingState("done");
     }
@@ -572,23 +567,19 @@ export default function App() {
                 </div>
               )}
 
-              <div className="processing-grid">
-                <div className="processing-list">
-                  <h3>Files</h3>
-                  <ul>
-                    {processingEntries.map((entry) => (
-                      <li key={entry.name} className={`status-${entry.status}`}>
-                        <div>
-                          <strong>{entry.name}</strong>
-                          {entry.detail && <span className="detail">{entry.detail}</span>}
-                        </div>
-                        <span className="status-pill">{entry.status.replace("-", " ")}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-
-                <LiveLog entries={activityLog} />
+              <div className="processing-list">
+                <h3>Files</h3>
+                <ul>
+                  {processingEntries.map((entry) => (
+                    <li key={entry.name} className={`status-${entry.status}`}>
+                      <div>
+                        <strong>{entry.name}</strong>
+                        {entry.detail && <span className="detail">{entry.detail}</span>}
+                      </div>
+                      <span className="status-pill">{entry.status.replace("-", " ")}</span>
+                    </li>
+                  ))}
+                </ul>
               </div>
 
               <div className="button-row">

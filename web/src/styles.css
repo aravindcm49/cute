@@ -28,7 +28,7 @@ body {
 }
 
 .app-header {
-  margin-bottom: 32px;
+  margin-bottom: 16px;
 }
 
 .app-eyebrow {
@@ -36,13 +36,13 @@ body {
   letter-spacing: 0.2em;
   font-size: 0.7rem;
   font-weight: 600;
-  margin: 0 0 12px;
+  margin: 0 0 6px;
   color: #5b4c40;
 }
 
 .app-header h1 {
   font-size: clamp(2rem, 3vw, 2.7rem);
-  margin: 0 0 12px;
+  margin: 0 0 6px;
 }
 
 .app-subtitle {
@@ -162,6 +162,10 @@ button:disabled {
   margin-top: 16px;
 }
 
+.processing-list {
+  margin-top: 16px;
+}
+
 .processing-list ul {
   list-style: none;
   padding: 0;
@@ -267,7 +271,7 @@ button:disabled {
   font-size: 0.85rem;
   line-height: 1.4;
   display: grid;
-  gap: 6px;
+  gap: 2px;
   margin-top: 12px;
 }
 

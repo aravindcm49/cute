@@ -69,7 +69,7 @@ export default function LiveLog({ entries }: LiveLogProps) {
               Waiting for updates...
             </p>
           )}
-          {entries.map((line, index) => (
+          {entries.filter((line) => line.trim() !== "").map((line, index) => (
             <p key={index}>{line}</p>
           ))}
         </div>
