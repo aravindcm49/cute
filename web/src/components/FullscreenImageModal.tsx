@@ -43,23 +43,25 @@ export default function FullscreenImageModal({
         data-testid="fullscreen-backdrop"
       />
       <div className="fullscreen-content">
-        <button
-          type="button"
-          className="fullscreen-close"
-          onClick={onClose}
-          aria-label="Close fullscreen preview"
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path
-              d="M6 6l12 12M18 6l-12 12"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-            />
-          </svg>
-        </button>
-        <img src={src} alt={alt} />
+        <div className="fullscreen-image-wrapper">
+          <button
+            type="button"
+            className="fullscreen-close"
+            onClick={onClose}
+            aria-label="Close fullscreen preview"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                d="M6 6l12 12M18 6l-12 12"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+              />
+            </svg>
+          </button>
+          <img src={src} alt={alt} />
+        </div>
       </div>
     </div>
   );

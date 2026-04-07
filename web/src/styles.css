@@ -60,9 +60,7 @@ body {
   animation: fadeIn 0.25s ease-out;
 }
 
-.panel:has(.verification-split) {
-  padding: 12px;
-}
+
 
 .field {
   display: flex;
@@ -315,9 +313,20 @@ button:disabled {
     grid-template-columns: 1fr;
   }
 
-  .verification-nav {
-    flex-direction: column;
-    gap: 8px;
+  .verification-action-row {
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .verification-nav-row {
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .verification-header {
+    flex-wrap: wrap;
   }
 }
 
@@ -328,10 +337,12 @@ button:disabled {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 16px;
+  gap: 12px;
 }
 
 .verification-header h2 {
   margin: 0;
+  flex-shrink: 0;
 }
 
 .verification-position {
@@ -341,14 +352,7 @@ button:disabled {
   background: #f0e7dd;
   padding: 6px 14px;
   border-radius: 999px;
-}
-
-.verification-nav {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 20px;
+  flex-shrink: 0;
 }
 
 .verification-filename {
@@ -357,6 +361,8 @@ button:disabled {
   color: #3f352b;
   text-align: center;
   word-break: break-all;
+  flex: 1;
+  min-width: 0;
 }
 
 .verification-split {
@@ -373,8 +379,15 @@ button:disabled {
   border: 1px solid rgba(150, 125, 105, 0.2);
 }
 
+.verification-image-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
 .verification-image h3 {
-  margin: 0 0 12px;
+  margin: 0;
   font-size: 0.9rem;
   color: #5b4c40;
 }
@@ -426,6 +439,10 @@ button:disabled {
 .image-expand-button svg {
   width: 18px;
   height: 18px;
+}
+
+.image-expand-button {
+  padding: 0;
 }
 
 .image-hover-magnifier {
@@ -503,19 +520,12 @@ button:disabled {
   font-weight: 600;
 }
 
-.verification-actions {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 16px;
-  margin-bottom: 16px;
-  flex-wrap: wrap;
+.verification-action-row {
+  justify-content: center;
 }
 
-.verification-status {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+.verification-nav-row {
+  justify-content: center;
 }
 
 .review-pill {
@@ -548,46 +558,76 @@ button:disabled {
   position: fixed;
   inset: 0;
   z-index: 50;
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
 }
 
 .fullscreen-backdrop {
   position: absolute;
   inset: 0;
+  width: 100%;
+  height: 100%;
   border: none;
-  background: rgba(25, 20, 16, 0.72);
+  border-radius: 0;
+  padding: 0;
+  margin: 0;
+  background: rgba(244, 240, 234, 0.92);
+  border-radius: 18px;
+  -webkit-appearance: none;
+  appearance: none;
 }
 
 .fullscreen-content {
   position: relative;
   z-index: 1;
-  padding: 24px;
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  max-width: 1200px;
+  padding: 60px;
+  box-sizing: border-box;
+  pointer-events: none;
+}
+
+.fullscreen-image-wrapper {
+  position: relative;
+  max-width: 90%;
+  max-height: 85vh;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 28px 60px rgba(0, 0, 0, 0.15);
+  pointer-events: auto;
+  display: flex;
 }
 
 .fullscreen-content img {
-  max-width: 90vw;
-  max-height: 90vh;
-  border-radius: 16px;
-  box-shadow: 0 28px 60px rgba(0, 0, 0, 0.45);
+  display: block;
+  max-width: 100%;
+  max-height: 80vh;
+  object-fit: contain;
 }
 
 .fullscreen-close {
   position: absolute;
-  top: 12px;
-  right: 12px;
+  top: 8px;
+  right: 8px;
+  z-index: 51;
   width: 40px;
   height: 40px;
   border-radius: 999px;
   border: none;
+  padding: 0;
   background: rgba(255, 255, 255, 0.92);
   color: #1f1f1f;
   display: grid;
   place-items: center;
   cursor: pointer;
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+  pointer-events: auto;
 }
 
 .fullscreen-close svg {
@@ -754,6 +794,11 @@ button:disabled {
   .app-shell:has(.verification-split) {
     max-width: 880px;
   }
+
+  .fullscreen-content {
+    max-width: 880px;
+    padding: 40px;
+  }
 }
 
 /* Mobile refinements */
@@ -771,12 +816,5 @@ button:disabled {
     max-height: 400px;
   }
 
-  .verification-actions {
-    flex-direction: column;
-    align-items: stretch;
-  }
 
-  .verification-actions .button-row {
-    justify-content: center;
-  }
 }
