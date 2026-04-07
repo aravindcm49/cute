@@ -1,7 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Markdown from "react-markdown";
-import ImageHoverZoom from "./components/ImageHoverZoom";
-import FullscreenImageModal from "./components/FullscreenImageModal";
+import VerificationScreen from "./components/VerificationScreen";
 import {
   applyReviewStatuses,
   buildVerificationItems,
@@ -52,6 +50,8 @@ export default function App() {
   const [summaryStatusEntries, setSummaryStatusEntries] = useState<
     Array<{ name: string; entry: StatusEntryFromApi }>
   >([]);
+
+  const justVerifiedRef = useRef(false);
 
   const canRun = images.length > 0 && loadState === "success";
   const hasCompleted = processingState === "done";
@@ -258,6 +258,12 @@ export default function App() {
           item.name === imageName ? { ...item, reviewStatus: newStatus } : item
         )
       );
+
+      // Auto-advance to next item when marking as verified
+      if (newStatus === "verified") {
+        justVerifiedRef.current = true;
+        setVerificationIndex((prev) => Math.min(verificationItems.length - 1, prev + 1));
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to update review status.";
       setVerificationItems((prev) =>
@@ -331,6 +337,14 @@ export default function App() {
       verificationItems.every((item) => item.reviewStatus === "verified")
     );
   }, [verificationItems]);
+
+  // Auto-navigate to summary only when user just marked the final item
+  useEffect(() => {
+    if (allVerified && screen === "verification" && justVerifiedRef.current) {
+      justVerifiedRef.current = false;
+      void handleShowSummary();
+    }
+  }, [allVerified, screen]);
 
   async function handleShowSummary() {
     try {
@@ -589,161 +603,20 @@ export default function App() {
               </div>
             </>
           ) : screen === "verification" ? (
-            (() => {
-              const current = verificationItems[verificationIndex];
-              if (!current) {
-                return (
-                  <>
-                    <h2>Verification</h2>
-                    <p className="muted">No items to verify.</p>
-                    <div className="button-row">
-                      <button type="button" className="secondary" onClick={handleReset}>
-                        Back to Folder
-                      </button>
-                    </div>
-                  </>
-                );
-              }
-
-              const imageUrl = `/api/image/${encodeURIComponent(current.name)}?folder=${encodeURIComponent(folderPath)}`;
-
-              return (
-                <>
-                  <div className="verification-header">
-                    <h2>Verification</h2>
-                    <span className="verification-position">
-                      {verificationIndex + 1} of {verificationItems.length}
-                    </span>
-                  </div>
-
-                  <div className="verification-nav">
-                    <button
-                      type="button"
-                      className="secondary"
-                      onClick={handleVerificationPrev}
-                      disabled={verificationIndex === 0}
-                    >
-                      Prev
-                    </button>
-                    <span className="verification-filename">{current.name}</span>
-                    <button
-                      type="button"
-                      className="secondary"
-                      onClick={handleVerificationNext}
-                      disabled={verificationIndex === verificationItems.length - 1}
-                    >
-                      Next
-                    </button>
-                  </div>
-
-                  <div className="verification-split">
-                    <div className="verification-image">
-                      <h3>Source Image</h3>
-                      <ImageHoverZoom
-                        src={imageUrl}
-                        alt={current.name}
-                        onExpand={openFullscreen}
-                        enableFullscreenShortcut={true}
-                      />
-                    </div>
-
-                    <div className="verification-transcription">
-                      <h3>Transcription</h3>
-                      <div className="transcription-content">
-                        {current.transcriptionLoading && (
-                          <p className="loading-indicator muted">
-                            <span className="spinner" />
-                            Loading transcription...
-                          </p>
-                        )}
-                        {current.transcriptionError && (
-                          <p className="error">{current.transcriptionError}</p>
-                        )}
-                        {current.transcriptionContent && (
-                          <Markdown>{current.transcriptionContent}</Markdown>
-                        )}
-                        {!current.transcriptionLoading &&
-                          !current.transcriptionError &&
-                          !current.transcriptionContent && (
-                            <p className="muted">No transcription available.</p>
-                          )}
-                      </div>
-                    </div>
-                  </div>
-
-                  <FullscreenImageModal
-                    src={imageUrl}
-                    alt={current.name}
-                    isOpen={isFullscreenOpen}
-                    onClose={closeFullscreen}
-                  />
-
-                  <div className="verification-actions">
-                    <div className="verification-status">
-                      <span
-                        className={`review-pill review-${current.reviewStatus}`}
-                      >
-                        {current.reviewStatus.replace("-", " ")}
-                      </span>
-                    </div>
-                    <div className="button-row">
-                      <button
-                        type="button"
-                        className="primary"
-                        onClick={() => handleUpdateReviewStatus(current.name, "verified")}
-                        disabled={current.reviewStatus === "verified"}
-                      >
-                        Verified
-                      </button>
-                      <button
-                        type="button"
-                        className="secondary"
-                        onClick={() =>
-                          handleUpdateReviewStatus(current.name, "needs-improvement")
-                        }
-                        disabled={current.reviewStatus === "needs-improvement"}
-                      >
-                        Needs Improvement
-                      </button>
-                      {current.reviewStatus === "needs-improvement" && (
-                        <button
-                          type="button"
-                          className="secondary"
-                          onClick={() => handleReprocess(current.name)}
-                          disabled={current.reprocessing}
-                        >
-                          {current.reprocessing ? (
-                            <>
-                              <span className="spinner" /> Re-processing...
-                            </>
-                          ) : (
-                            "Re-process"
-                          )}
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="button-row">
-                    <button type="button" className="secondary" onClick={handleBackToProcessing}>
-                      Back to Processing
-                    </button>
-                    <button type="button" className="secondary" onClick={handleReset}>
-                      Back to Folder
-                    </button>
-                    {allVerified && (
-                      <button
-                        type="button"
-                        className="primary"
-                        onClick={() => void handleShowSummary()}
-                      >
-                        View Summary
-                      </button>
-                    )}
-                  </div>
-                </>
-              );
-            })()
+            <VerificationScreen
+              items={verificationItems}
+              currentIndex={verificationIndex}
+              folderPath={folderPath}
+              isFullscreenOpen={isFullscreenOpen}
+              onPrev={handleVerificationPrev}
+              onNext={handleVerificationNext}
+              onUpdateStatus={handleUpdateReviewStatus}
+              onReprocess={handleReprocess}
+              onBackToProcessing={handleBackToProcessing}
+              onOpenFullscreen={openFullscreen}
+              onCloseFullscreen={closeFullscreen}
+              onViewSummary={handleShowSummary}
+            />
           ) : screen === "summary" ? (
             (() => {
               const verifiedCount = summaryStatusEntries.filter(
