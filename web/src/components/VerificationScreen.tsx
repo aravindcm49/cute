@@ -47,11 +47,75 @@ export default function VerificationScreen({
 }: VerificationScreenProps) {
   const current = items[currentIndex];
   const [extraInstructions, setExtraInstructions] = React.useState("");
+  const [renameOpen, setRenameOpen] = React.useState(false);
+  const [renameValue, setRenameValue] = React.useState("");
+  const [renameLoading, setRenameLoading] = React.useState(false);
+  const [renameError, setRenameError] = React.useState<string | null>(null);
+  const [suggestLoading, setSuggestLoading] = React.useState(false);
 
-  // Reset extra instructions when navigating to a different image
   React.useEffect(() => {
     setExtraInstructions("");
+    setRenameOpen(false);
+    setRenameValue("");
+    setRenameError(null);
   }, [currentIndex]);
+
+  function handleRenameOpen() {
+    setRenameValue(current?.suggestedFilename ?? "");
+    setRenameError(null);
+    setRenameOpen(true);
+  }
+
+  async function handleRename() {
+    if (!current || !renameValue.trim()) return;
+    setRenameLoading(true);
+    setRenameError(null);
+    try {
+      const res = await fetch(`/api/rename/${encodeURIComponent(current.name)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ folder: folderPath, newName: renameValue.trim() }),
+      });
+      if (res.status === 409) {
+        setRenameError("A file with that name already exists.");
+        return;
+      }
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Rename failed.");
+      }
+      // Reload the page to reflect rename
+      window.location.reload();
+    } catch (error) {
+      setRenameError(error instanceof Error ? error.message : "Rename failed.");
+    } finally {
+      setRenameLoading(false);
+    }
+  }
+
+  async function handleResuggest() {
+    if (!current) return;
+    setSuggestLoading(true);
+    try {
+      const res = await fetch(`/api/suggest-name/${encodeURIComponent(current.name)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ folder: folderPath }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Suggest failed.");
+      }
+      const data = await res.json();
+      if (data.suggestedFilename) {
+        setRenameValue(data.suggestedFilename);
+      }
+    } catch (error) {
+      setRenameError(error instanceof Error ? error.message : "Suggestion failed.");
+    } finally {
+      setSuggestLoading(false);
+    }
+  }
 
   if (!current) {
     return (
@@ -74,10 +138,36 @@ export default function VerificationScreen({
       <div className="verification-header">
         <h2>Verification</h2>
         <span className="verification-filename">{current.name}</span>
+        <button type="button" className="secondary rename-btn" onClick={handleRenameOpen}>
+          Rename
+        </button>
         <span className="verification-position">
           {currentIndex + 1} of {items.length}
         </span>
       </div>
+
+      {renameOpen && (
+        <div className="rename-inline">
+          <input
+            type="text"
+            className="rename-input"
+            value={renameValue}
+            onChange={(e) => setRenameValue(e.target.value)}
+            placeholder="new-filename (without extension)"
+            disabled={renameLoading}
+          />
+          <button type="button" className="primary" onClick={handleRename} disabled={renameLoading || !renameValue.trim()}>
+            {renameLoading ? "Renaming..." : "Apply"}
+          </button>
+          <button type="button" className="secondary" onClick={handleResuggest} disabled={suggestLoading}>
+            {suggestLoading ? "Suggesting..." : "Re-suggest"}
+          </button>
+          <button type="button" className="secondary" onClick={() => setRenameOpen(false)} disabled={renameLoading}>
+            Cancel
+          </button>
+          {renameError && <p className="error rename-error">{renameError}</p>}
+        </div>
+      )}
 
       <div className="verification-split">
         <div className="verification-image">

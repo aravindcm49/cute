@@ -9,6 +9,7 @@ const TranscriptionSchema = z.object({
   description: z.string().describe("A brief description of what the slide/image shows, including visual layout details"),
   textContent: z.string().describe("The exact text content visible on the slide, preserving line breaks and formatting. Include all text, symbols, bullet points, and markers exactly as they appear."),
   keyInformation: z.array(z.string()).describe("Key takeaways or points conveyed by the slide"),
+  suggestedFilename: z.string().describe("A short, descriptive filename (without extension) for this image based on its content. Use lowercase with hyphens, e.g. 'cocktail-menu-slide' or 'speaker-introduction'."),
 });
 
 export type TranscriptionResult = z.infer<typeof TranscriptionSchema>;

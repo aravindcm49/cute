@@ -13,15 +13,16 @@ export type VerificationItem = {
   transcriptionError: string | null;
   reprocessing: boolean;
   streamingContent: string | null;
+  suggestedFilename?: string;
 };
 
-type StatusMap = Record<string, { reviewStatus?: ReviewStatus }>;
+type StatusMap = Record<string, { reviewStatus?: ReviewStatus; suggestedFilename?: string }>;
 
-function findReviewStatus(statusMap: StatusMap, imageName: string): ReviewStatus | undefined {
+function findStatusEntry(statusMap: StatusMap, imageName: string): { reviewStatus?: ReviewStatus; suggestedFilename?: string } | undefined {
   const match = Object.entries(statusMap).find(([filePath]) =>
     filePath.endsWith(`/${imageName}`)
   );
-  return match?.[1].reviewStatus;
+  return match?.[1];
 }
 
 export function applyReviewStatuses(
@@ -33,11 +34,15 @@ export function applyReviewStatuses(
   }
 
   return items.map((item) => {
-    const reviewStatus = findReviewStatus(statusMap, item.name);
-    if (reviewStatus === undefined) {
+    const entry = findStatusEntry(statusMap, item.name);
+    if (!entry) {
       return item;
     }
-    return { ...item, reviewStatus };
+    return {
+      ...item,
+      ...(entry.reviewStatus !== undefined ? { reviewStatus: entry.reviewStatus } : {}),
+      ...(entry.suggestedFilename !== undefined ? { suggestedFilename: entry.suggestedFilename } : {}),
+    };
   });
 }
 

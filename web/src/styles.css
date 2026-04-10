@@ -875,3 +875,33 @@ button:disabled {
   opacity: 0.8;
   font-size: 0.8rem;
 }
+
+/* Rename UI */
+.rename-btn {
+  font-size: 0.75rem;
+  padding: 4px 10px;
+}
+
+.rename-inline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 8px 0;
+  margin-bottom: 8px;
+}
+
+.rename-input {
+  flex: 1;
+  min-width: 200px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid #ccc;
+  font-family: inherit;
+  font-size: 0.85rem;
+}
+
+.rename-error {
+  width: 100%;
+  margin: 4px 0 0;
+}

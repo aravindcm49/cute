@@ -27,6 +27,7 @@ type StatusEntryFromApi = {
   reviewStatus: ReviewStatus;
   currentVersion: number;
   verifiedAt?: string;
+  suggestedFilename?: string;
 };
 
 export default function App() {

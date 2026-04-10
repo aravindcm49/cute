@@ -11,6 +11,7 @@ export type StatusEntry = {
   error?: string;
   completedAt?: string;
   verifiedAt?: string;
+  suggestedFilename?: string;
 };
 export type StatusFile = Record<string, StatusEntry>;
 
@@ -64,6 +65,9 @@ export function normalizeStatusEntry(entry: unknown): StatusEntry {
   }
   if (typeof typedEntry.verifiedAt === "string") {
     normalized.verifiedAt = typedEntry.verifiedAt;
+  }
+  if (typeof typedEntry.suggestedFilename === "string" && typedEntry.suggestedFilename.length > 0) {
+    normalized.suggestedFilename = typedEntry.suggestedFilename;
   }
 
   return normalized;

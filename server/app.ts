@@ -233,6 +233,10 @@ export function createTranscribeHandler(deps: TranscriptionDeps) {
         // Save to the image folder so verification can find it
         saveVersionedTranscription(folder, imagePath, 1, transcription);
         updateFileStatus(status, imagePath, "completed", undefined, statusFilePath);
+        if (transcription.suggestedFilename) {
+          status[imagePath].suggestedFilename = transcription.suggestedFilename;
+          saveStatusFile(status, statusFilePath);
+        }
         completed++;
         results.push({ imageName, status: "completed" });
         sendSse(`[FILE_DONE] ${imageName}`);
@@ -386,6 +390,46 @@ export function createReprocessHandler(deps: TranscriptionDeps) {
         version: currentVersion,
         status: entry,
       });
+    }
+  };
+}
+
+export function createSuggestNameHandler(deps: TranscriptionDeps) {
+  return async (req: express.Request, res: express.Response) => {
+    const folder = typeof req.body?.folder === "string" ? req.body.folder : "";
+    if (folder.trim().length === 0) {
+      return res.status(400).json({ error: "Folder path is required." });
+    }
+
+    if (!fs.existsSync(folder)) {
+      return res.status(404).json({ error: "Folder not found." });
+    }
+
+    if (!isDirectory(folder)) {
+      return res.status(400).json({ error: "Provided path is not a directory." });
+    }
+
+    const imageName = req.params.imageName;
+    if (typeof imageName !== "string" || imageName.trim().length === 0) {
+      return res.status(400).json({ error: "Image name is required." });
+    }
+
+    if (imageName !== path.basename(imageName)) {
+      return res.status(400).json({ error: "Invalid image name." });
+    }
+
+    const imagePath = path.join(folder, imageName);
+    if (!fs.existsSync(imagePath)) {
+      return res.status(404).json({ error: "Image not found." });
+    }
+
+    try {
+      const { client, model } = await deps.createTranscriptionClient();
+      const result = await deps.transcribeImage(client, model, imagePath);
+      return res.json({ suggestedFilename: result.suggestedFilename ?? "" });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      return res.status(500).json({ error: errorMessage });
     }
   };
 }
@@ -860,7 +904,80 @@ export function createApp(overrides: Partial<TranscriptionDeps> & { healthDeps?:
     return res.json({ instructions });
   });
 
+  app.post("/api/suggest-name/:imageName", createSuggestNameHandler(deps));
+
   app.post("/api/transcribe", createTranscribeHandler(deps));
+
+  app.post("/api/rename/:imageName", (req, res) => {
+    const folder = typeof req.body?.folder === "string" ? req.body.folder : "";
+    if (folder.trim().length === 0) {
+      return res.status(400).json({ error: "Folder path is required." });
+    }
+
+    if (!fs.existsSync(folder)) {
+      return res.status(404).json({ error: "Folder not found." });
+    }
+
+    if (!isDirectory(folder)) {
+      return res.status(400).json({ error: "Provided path is not a directory." });
+    }
+
+    const imageName = req.params.imageName;
+    if (typeof imageName !== "string" || imageName.trim().length === 0) {
+      return res.status(400).json({ error: "Image name is required." });
+    }
+
+    if (imageName !== path.basename(imageName)) {
+      return res.status(400).json({ error: "Invalid image name." });
+    }
+
+    const newName = typeof req.body?.newName === "string" ? req.body.newName.trim() : "";
+    if (newName.length === 0) {
+      return res.status(400).json({ error: "newName is required." });
+    }
+
+    const imagePath = path.join(folder, imageName);
+    if (!fs.existsSync(imagePath)) {
+      return res.status(404).json({ error: "Image not found." });
+    }
+
+    const ext = path.extname(imageName);
+    const newImageName = newName + ext;
+    const newImagePath = path.join(folder, newImageName);
+
+    if (fs.existsSync(newImagePath)) {
+      return res.status(409).json({ error: "A file with that name already exists." });
+    }
+
+    // Rename image file
+    fs.renameSync(imagePath, newImagePath);
+
+    // Rename corresponding md file(s)
+    const oldBaseName = path.basename(imageName, ext);
+    const statusFilePath = path.join(folder, config.statusFile);
+    const status = loadStatusFile(statusFilePath);
+    const entry = status[imagePath];
+    const version = entry?.currentVersion ?? 1;
+
+    const oldMdName = version > 1 ? `${oldBaseName}_v${version}.md` : `${oldBaseName}.md`;
+    const newMdName = version > 1 ? `${newName}_v${version}.md` : `${newName}.md`;
+    const oldMdPath = path.join(folder, oldMdName);
+    const newMdPath = path.join(folder, newMdName);
+
+    if (fs.existsSync(oldMdPath)) {
+      fs.renameSync(oldMdPath, newMdPath);
+    }
+
+    // Update status JSON key
+    if (entry) {
+      delete status[imagePath];
+      status[newImagePath] = entry;
+      saveStatusFile(status, statusFilePath);
+    }
+
+    return res.json({ newImageName, newImagePath, oldImageName: imageName });
+  });
+
   app.post("/api/reprocess/:imageName", createReprocessHandler(deps));
 
   return app;
