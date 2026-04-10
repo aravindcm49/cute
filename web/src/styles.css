@@ -818,3 +818,60 @@ button:disabled {
 
 
 }
+
+/* Health Banner */
+.health-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-radius: 12px;
+  font-size: 0.85rem;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.health-ready {
+  background: rgba(34, 139, 34, 0.12);
+  color: #1a6b1a;
+  border: 1px solid rgba(34, 139, 34, 0.25);
+}
+
+.health-no-model {
+  background: rgba(210, 160, 40, 0.14);
+  color: #7a5c00;
+  border: 1px solid rgba(210, 160, 40, 0.3);
+}
+
+.health-no-connection {
+  background: rgba(200, 40, 40, 0.1);
+  color: #8b1a1a;
+  border: 1px solid rgba(200, 40, 40, 0.25);
+}
+
+.health-checking {
+  background: rgba(100, 100, 100, 0.08);
+  color: #4a4036;
+  border: 1px solid rgba(100, 100, 100, 0.15);
+}
+
+.health-check-btn {
+  margin-left: auto;
+  background: none;
+  border: 1px solid currentColor;
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 0.78rem;
+  color: inherit;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.health-check-btn:hover {
+  opacity: 0.7;
+}
+
+.health-models {
+  opacity: 0.8;
+  font-size: 0.8rem;
+}

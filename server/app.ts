@@ -24,6 +24,64 @@ export type TranscriptionDeps = {
   getImageFiles: typeof getImageFiles;
 };
 
+export type HealthDeps = {
+  createClient: () => Promise<unknown>;
+  listLoaded: (client: unknown) => Promise<Array<{ identifier: string }>>;
+  listDownloaded: (client: unknown) => Promise<Array<{ modelKey: string }>>;
+  loadModel: (modelKey: string, client: unknown) => Promise<unknown>;
+  modelName: string;
+};
+
+export function createHealthHandler(deps: HealthDeps) {
+  return async (_req: express.Request, res: express.Response) => {
+    let client: unknown;
+    try {
+      client = await deps.createClient();
+    } catch {
+      return res.json({ status: "no_connection", loadedModel: null, availableModels: [] });
+    }
+
+    let loadedModels: Array<{ identifier: string }>;
+    try {
+      loadedModels = await deps.listLoaded(client);
+    } catch {
+      return res.json({ status: "no_connection", loadedModel: null, availableModels: [] });
+    }
+
+    const isLoaded = loadedModels.some((m) => m.identifier === deps.modelName);
+    if (isLoaded) {
+      return res.json({ status: "ready", loadedModel: deps.modelName, availableModels: [] });
+    }
+
+    let downloadedModels: Array<{ modelKey: string }>;
+    try {
+      downloadedModels = await deps.listDownloaded(client);
+    } catch {
+      return res.json({ status: "no_connection", loadedModel: null, availableModels: [] });
+    }
+
+    const isDownloaded = downloadedModels.some((m) => m.modelKey === deps.modelName);
+    if (isDownloaded) {
+      try {
+        await deps.loadModel(deps.modelName, client);
+        return res.json({ status: "ready", loadedModel: deps.modelName, availableModels: [] });
+      } catch {
+        return res.json({
+          status: "no_model",
+          loadedModel: null,
+          availableModels: downloadedModels.map((m) => m.modelKey),
+        });
+      }
+    }
+
+    return res.json({
+      status: "no_model",
+      loadedModel: null,
+      availableModels: downloadedModels.map((m) => m.modelKey),
+    });
+  };
+}
+
 function isDirectory(folderPath: string): boolean {
   try {
     return fs.statSync(folderPath).isDirectory();
@@ -316,7 +374,7 @@ export function createReprocessHandler(deps: TranscriptionDeps) {
   };
 }
 
-export function createApp(overrides: Partial<TranscriptionDeps> = {}) {
+export function createApp(overrides: Partial<TranscriptionDeps> & { healthDeps?: HealthDeps } = {}) {
   const createClient = overrides.createTranscriptionClient ?? createTranscriptionClient;
   const runTranscription = overrides.transcribeImage ?? transcribeImage;
   const listImages = overrides.getImageFiles ?? getImageFiles;
@@ -329,9 +387,27 @@ export function createApp(overrides: Partial<TranscriptionDeps> = {}) {
   const app = express();
   app.use(express.json());
 
-  app.get("/api/health", (_req, res) => {
-    res.json({ ok: true });
-  });
+  const healthDeps: HealthDeps = {
+    createClient: async () => {
+      const { LMStudioClient } = await import("@lmstudio/sdk");
+      return new LMStudioClient({ baseUrl: config.lmStudioBaseUrl });
+    },
+    listLoaded: async (client: unknown) => {
+      const c = client as { llm: { listLoaded: () => Promise<Array<{ identifier: string }>> } };
+      return c.llm.listLoaded();
+    },
+    listDownloaded: async (client: unknown) => {
+      const c = client as { system: { listDownloadedModels: (domain: string) => Promise<Array<{ modelKey: string }>> } };
+      return c.system.listDownloadedModels("llm");
+    },
+    loadModel: async (modelKey: string, client: unknown) => {
+      const c = client as { llm: { load: (key: string) => Promise<unknown> } };
+      return c.llm.load(modelKey);
+    },
+    modelName: config.modelName,
+  };
+
+  app.get("/api/health", createHealthHandler(overrides.healthDeps ?? healthDeps));
 
   app.get("/api/images", (req, res) => {
     const folder = req.query.folder;
