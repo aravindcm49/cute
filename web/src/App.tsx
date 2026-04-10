@@ -780,7 +780,7 @@ export default function App() {
         </p>
       </header>
 
-      <HealthBanner health={health} onCheckAgain={refetchHealth} />
+      {screen === "folder" && <HealthBanner health={health} onCheckAgain={refetchHealth} />}
 
       {screen === "folder" ? (
         <section className="panel">
