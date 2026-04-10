@@ -316,6 +316,54 @@ describe("POST /api/reprocess/:imageName", () => {
     );
   });
 
+  it("prepends custom folder instructions to extraInstructions", async () => {
+    const statusPath = path.join(tempDir, "transcription-status.json");
+    const status = {
+      [path.join(tempDir, "slide_001.jpg")]: {
+        processingStatus: "completed",
+        reviewStatus: "needs-improvement",
+        currentVersion: 1,
+      },
+    };
+    fs.writeFileSync(statusPath, JSON.stringify(status, null, 2));
+    fs.writeFileSync(path.join(tempDir, "custom_instructions.txt"), "CAFI meetup about bartending");
+
+    await invokeReprocess(tempDir, "slide_001.jpg", undefined, {
+      extraInstructions: "Focus on the chart data",
+    });
+
+    expect(transcribeImageMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      expect.any(Function),
+      "CAFI meetup about bartending\n\nFocus on the chart data"
+    );
+  });
+
+  it("passes only custom instructions when no extraInstructions provided", async () => {
+    const statusPath = path.join(tempDir, "transcription-status.json");
+    const status = {
+      [path.join(tempDir, "slide_001.jpg")]: {
+        processingStatus: "completed",
+        reviewStatus: "needs-improvement",
+        currentVersion: 1,
+      },
+    };
+    fs.writeFileSync(statusPath, JSON.stringify(status, null, 2));
+    fs.writeFileSync(path.join(tempDir, "custom_instructions.txt"), "CAFI meetup about bartending");
+
+    await invokeReprocess(tempDir, "slide_001.jpg");
+
+    expect(transcribeImageMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      expect.any(Function),
+      "CAFI meetup about bartending"
+    );
+  });
+
   it("still returns JSON when Accept header is not text/event-stream", async () => {
     const statusPath = path.join(tempDir, "transcription-status.json");
     const status = {

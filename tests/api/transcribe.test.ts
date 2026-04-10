@@ -98,4 +98,28 @@ describe("POST /api/transcribe", () => {
     expect(data).toContain("[mock]");
     expect(data).toContain("data: [DONE]");
   });
+
+  it("passes custom instructions from folder to transcribeImage", async () => {
+    fs.writeFileSync(path.join(tempDir, "custom_instructions.txt"), "These are CAFI slides");
+
+    // Remove one image so only one call
+    fs.unlinkSync(path.join(tempDir, "two.png"));
+
+    const response = await invokeTranscribe(tempDir);
+
+    expect(response._getStatusCode()).toBe(200);
+    expect(transcribeImageMock).toHaveBeenCalledTimes(1);
+    // 5th argument is extraInstructions
+    expect(transcribeImageMock.mock.calls[0][4]).toBe("These are CAFI slides");
+  });
+
+  it("does not pass extraInstructions when no custom_instructions.txt exists", async () => {
+    fs.unlinkSync(path.join(tempDir, "two.png"));
+
+    const response = await invokeTranscribe(tempDir);
+
+    expect(response._getStatusCode()).toBe(200);
+    expect(transcribeImageMock).toHaveBeenCalledTimes(1);
+    expect(transcribeImageMock.mock.calls[0][4]).toBeUndefined();
+  });
 });

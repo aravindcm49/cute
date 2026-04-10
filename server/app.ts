@@ -199,6 +199,13 @@ export function createTranscribeHandler(deps: TranscriptionDeps) {
     }
 
     const { client, model } = await createClient();
+
+    // Load custom instructions for this folder
+    const customInstructionsPath = path.join(folder, "custom_instructions.txt");
+    const customInstructions = fs.existsSync(customInstructionsPath)
+      ? fs.readFileSync(customInstructionsPath, "utf-8").trim()
+      : "";
+
     let isClosed = false;
     req.on("close", () => {
       isClosed = true;
@@ -222,7 +229,7 @@ export function createTranscribeHandler(deps: TranscriptionDeps) {
         updateFileStatus(status, imagePath, "in_progress", undefined, statusFilePath);
         const transcription = await runTranscription(client, model, imagePath, (message) => {
           sendSse(message);
-        });
+        }, customInstructions || undefined);
         // Save to the image folder so verification can find it
         saveVersionedTranscription(folder, imagePath, 1, transcription);
         updateFileStatus(status, imagePath, "completed", undefined, statusFilePath);
@@ -288,6 +295,15 @@ export function createReprocessHandler(deps: TranscriptionDeps) {
 
     const extraInstructions = typeof req.body?.extraInstructions === "string" ? req.body.extraInstructions : undefined;
 
+    // Load custom instructions for this folder
+    const customInstructionsPath = path.join(folder, "custom_instructions.txt");
+    const customInstructions = fs.existsSync(customInstructionsPath)
+      ? fs.readFileSync(customInstructionsPath, "utf-8").trim()
+      : "";
+
+    // Combine custom folder instructions with per-request extra instructions
+    const combinedInstructions = [customInstructions, extraInstructions].filter(Boolean).join("\n\n") || undefined;
+
     const statusFilePath = path.join(folder, config.statusFile);
     const status = loadStatusFile(statusFilePath);
     const entry = ensureStatusEntry(status, imagePath);
@@ -330,7 +346,7 @@ export function createReprocessHandler(deps: TranscriptionDeps) {
 
       const result = await runTranscription(client, model, imagePath, (message) => {
         sendSse(message);
-      }, extraInstructions);
+      }, combinedInstructions);
 
       saveVersionedTranscription(folder, imagePath, nextVersion, result);
 
@@ -803,6 +819,45 @@ export function createApp(overrides: Partial<TranscriptionDeps> & { healthDeps?:
     res.setHeader("Content-Type", "text/csv");
     res.setHeader("Content-Disposition", "attachment; filename=transcription-tracking.csv");
     return res.send(csv);
+  });
+
+  app.get("/api/custom-instructions", (req, res) => {
+    const folder = typeof req.query.folder === "string" ? req.query.folder : "";
+    if (folder.trim().length === 0) {
+      return res.status(400).json({ error: "Query parameter 'folder' is required." });
+    }
+
+    if (!fs.existsSync(folder)) {
+      return res.status(404).json({ error: "Folder not found." });
+    }
+
+    if (!isDirectory(folder)) {
+      return res.status(400).json({ error: "Provided path is not a directory." });
+    }
+
+    const filePath = path.join(folder, "custom_instructions.txt");
+    const instructions = fs.existsSync(filePath) ? fs.readFileSync(filePath, "utf-8") : "";
+    return res.json({ instructions });
+  });
+
+  app.post("/api/custom-instructions", (req, res) => {
+    const folder = typeof req.body?.folder === "string" ? req.body.folder : "";
+    if (folder.trim().length === 0) {
+      return res.status(400).json({ error: "Folder path is required." });
+    }
+
+    if (!fs.existsSync(folder)) {
+      return res.status(404).json({ error: "Folder not found." });
+    }
+
+    if (!isDirectory(folder)) {
+      return res.status(400).json({ error: "Provided path is not a directory." });
+    }
+
+    const instructions = typeof req.body?.instructions === "string" ? req.body.instructions : "";
+    const filePath = path.join(folder, "custom_instructions.txt");
+    fs.writeFileSync(filePath, instructions, "utf-8");
+    return res.json({ instructions });
   });
 
   app.post("/api/transcribe", createTranscribeHandler(deps));

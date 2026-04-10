@@ -35,6 +35,7 @@ export default function App() {
   const [images, setImages] = useState<ImageEntry[]>([]);
   const [loadState, setLoadState] = useState<LoadState>("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [customInstructions, setCustomInstructions] = useState("");
   const [processingEntries, setProcessingEntries] = useState<ProcessingEntry[]>([]);
   const [processingState, setProcessingState] = useState<"idle" | "running" | "done">("idle");
   const [processingError, setProcessingError] = useState<string | null>(null);
@@ -101,6 +102,17 @@ export default function App() {
 
       setImages(payload.images ?? []);
       setLoadState("success");
+
+      // Load custom instructions if they exist
+      try {
+        const instrRes = await fetch(`/api/custom-instructions?folder=${encodeURIComponent(folderPath)}`);
+        if (instrRes.ok) {
+          const instrPayload = await instrRes.json();
+          setCustomInstructions(instrPayload.instructions ?? "");
+        }
+      } catch {
+        // Best-effort
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to load images.";
       setImages([]);
@@ -506,6 +518,7 @@ export default function App() {
   function handleNewSession() {
     setFolderPath("");
     setImages([]);
+    setCustomInstructions("");
     setLoadState("idle");
     setErrorMessage(null);
     setProcessingEntries([]);
@@ -663,6 +676,29 @@ export default function App() {
               placeholder="/Users/you/Pictures/Slides"
               value={folderPath}
               onChange={(event) => setFolderPath(event.target.value)}
+            />
+          </label>
+
+          <label className="field">
+            <span>Custom Instructions <span className="muted">(optional — prepended to AI prompt)</span></span>
+            <textarea
+              placeholder="e.g. These are photos from a CAFI meetup about bartending"
+              value={customInstructions}
+              onChange={(event) => setCustomInstructions(event.target.value)}
+              onBlur={async () => {
+                if (folderPath.trim()) {
+                  try {
+                    await fetch("/api/custom-instructions", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ folder: folderPath, instructions: customInstructions }),
+                    });
+                  } catch {
+                    // Best-effort save
+                  }
+                }
+              }}
+              rows={3}
             />
           </label>
 
