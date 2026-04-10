@@ -42,6 +42,36 @@ async function invokeReprocess(
   return res;
 }
 
+async function invokeReprocessSse(
+  folder: string,
+  imageName: string,
+  deps?: Partial<TranscriptionDeps>
+) {
+  const supportedExtensions = new Set([".jpg", ".jpeg", ".png", ".webp"]);
+  const fullDeps: TranscriptionDeps = {
+    createTranscriptionClient: deps?.createTranscriptionClient ?? createTranscriptionClientMock,
+    transcribeImage: deps?.transcribeImage ?? transcribeImageMock,
+    getImageFiles: deps?.getImageFiles ?? ((dir: string) => {
+      const entries = fs.readdirSync(dir);
+      return entries
+        .filter((entry) => supportedExtensions.has(path.extname(entry).toLowerCase()))
+        .map((entry) => path.join(dir, entry));
+    }),
+  };
+
+  const handler = createReprocessHandler(fullDeps);
+  const { req, res } = createMocks({
+    method: "POST",
+    url: `/api/reprocess/${imageName}`,
+    params: { imageName },
+    headers: { "content-type": "application/json", accept: "text/event-stream" },
+    body: { folder },
+  });
+
+  await handler(req, res);
+  return res;
+}
+
 describe("POST /api/reprocess/:imageName", () => {
   let tempDir: string;
 
@@ -50,7 +80,9 @@ describe("POST /api/reprocess/:imageName", () => {
     fs.writeFileSync(path.join(tempDir, "slide_001.jpg"), "");
     fs.writeFileSync(path.join(tempDir, "slide_002.png"), "");
     createTranscriptionClientMock.mockResolvedValue({ client: {}, model: {} });
-    transcribeImageMock.mockImplementation(async () => {
+    transcribeImageMock.mockImplementation(async (_client: unknown, _model: unknown, _imagePath: string, onProgress?: (msg: string) => void) => {
+      onProgress?.("token chunk 1");
+      onProgress?.("token chunk 2");
       return { description: "desc", textContent: "text", keyInformation: ["info"] };
     });
   });
@@ -151,5 +183,82 @@ describe("POST /api/reprocess/:imageName", () => {
     // Verify v3 file was created
     const mdPath = path.join(tempDir, "slide_001_v3.md");
     expect(fs.existsSync(mdPath)).toBe(true);
+  });
+
+  it("returns SSE stream with FILE_START, token chunks, and FILE_DONE on success", async () => {
+    const statusPath = path.join(tempDir, "transcription-status.json");
+    const status = {
+      [path.join(tempDir, "slide_001.jpg")]: {
+        processingStatus: "completed",
+        reviewStatus: "needs-improvement",
+        currentVersion: 1,
+      },
+    };
+    fs.writeFileSync(statusPath, JSON.stringify(status, null, 2));
+
+    const response = await invokeReprocessSse(tempDir, "slide_001.jpg");
+
+    expect(response._getStatusCode()).toBe(200);
+    expect(response._getHeaders()["content-type"]).toContain("text/event-stream");
+
+    const data = response._getData();
+    expect(data).toContain("[FILE_START] slide_001.jpg");
+    expect(data).toContain("token chunk 1");
+    expect(data).toContain("token chunk 2");
+    expect(data).toContain("[FILE_DONE] slide_001.jpg");
+
+    // Verify status and file were still updated
+    const updatedStatus = JSON.parse(fs.readFileSync(statusPath, "utf-8"));
+    const entry = updatedStatus[path.join(tempDir, "slide_001.jpg")];
+    expect(entry.currentVersion).toBe(2);
+    expect(entry.reviewStatus).toBe("not-verified");
+
+    const mdPath = path.join(tempDir, "slide_001_v2.md");
+    expect(fs.existsSync(mdPath)).toBe(true);
+  });
+
+  it("emits FILE_ERROR event on SSE stream when transcription fails", async () => {
+    const statusPath = path.join(tempDir, "transcription-status.json");
+    const status = {
+      [path.join(tempDir, "slide_001.jpg")]: {
+        processingStatus: "completed",
+        reviewStatus: "needs-improvement",
+        currentVersion: 1,
+      },
+    };
+    fs.writeFileSync(statusPath, JSON.stringify(status, null, 2));
+
+    transcribeImageMock.mockRejectedValue(new Error("LLM connection failed"));
+
+    const response = await invokeReprocessSse(tempDir, "slide_001.jpg");
+
+    expect(response._getStatusCode()).toBe(200);
+    const data = response._getData();
+    expect(data).toContain("[FILE_START] slide_001.jpg");
+    expect(data).toContain("[FILE_ERROR] slide_001.jpg | LLM connection failed");
+
+    // Verify version was NOT incremented
+    const updatedStatus = JSON.parse(fs.readFileSync(statusPath, "utf-8"));
+    const entry = updatedStatus[path.join(tempDir, "slide_001.jpg")];
+    expect(entry.currentVersion).toBe(1);
+  });
+
+  it("still returns JSON when Accept header is not text/event-stream", async () => {
+    const statusPath = path.join(tempDir, "transcription-status.json");
+    const status = {
+      [path.join(tempDir, "slide_001.jpg")]: {
+        processingStatus: "completed",
+        reviewStatus: "needs-improvement",
+        currentVersion: 1,
+      },
+    };
+    fs.writeFileSync(statusPath, JSON.stringify(status, null, 2));
+
+    const response = await invokeReprocess(tempDir, "slide_001.jpg");
+
+    expect(response._getStatusCode()).toBe(200);
+    const body = response._getJSONData();
+    expect(body.imageName).toBe("slide_001.jpg");
+    expect(body.version).toBe(2);
   });
 });

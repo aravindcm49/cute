@@ -277,29 +277,103 @@ export default function App() {
   async function handleReprocess(imageName: string) {
     setVerificationItems((prev) =>
       prev.map((item) =>
-        item.name === imageName ? { ...item, reprocessing: true, transcriptionError: null } : item
+        item.name === imageName
+          ? { ...item, reprocessing: true, transcriptionError: null, streamingContent: "", transcriptionContent: null }
+          : item
       )
     );
 
     try {
-      const res = await fetch(`/api/reprocess/${encodeURIComponent(imageName)}`, {
+      const response = await fetch(`/api/reprocess/${encodeURIComponent(imageName)}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "text/event-stream",
+        },
         body: JSON.stringify({ folder: folderPath }),
       });
 
-      if (!res.ok) {
-        const payload = await res.json().catch(() => ({}));
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
         throw new Error(payload.error || "Re-processing failed.");
       }
 
-      // Reload transcription after re-process
+      if (!response.body) {
+        throw new Error("Streaming response not available.");
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let accumulated = "";
+      let isDone = false;
+      let errorMsg: string | null = null;
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const events = buffer.split("\n\n");
+        buffer = events.pop() ?? "";
+
+        for (const event of events) {
+          const dataLines = event
+            .split("\n")
+            .filter((line) => line.startsWith("data:"))
+            .map((line) => line.replace(/^data:\s?/, ""));
+          if (dataLines.length === 0) continue;
+          const data = dataLines.join("\n").trim();
+          if (!data) continue;
+
+          if (data.startsWith("[FILE_START]")) {
+            // Reset streaming content
+            accumulated = "";
+            continue;
+          }
+
+          if (data.startsWith("[FILE_DONE]")) {
+            isDone = true;
+            continue;
+          }
+
+          if (data.startsWith("[FILE_ERROR]")) {
+            const payload = data.replace("[FILE_ERROR]", "").trim();
+            const parts = payload.split("|");
+            errorMsg = parts.length > 1 ? parts.slice(1).join("|").trim() : parts[0]?.trim() ?? "Unknown error";
+            continue;
+          }
+
+          // Token chunk
+          accumulated += data;
+          setVerificationItems((prev) =>
+            prev.map((item) =>
+              item.name === imageName
+                ? { ...item, streamingContent: accumulated }
+                : item
+            )
+          );
+        }
+      }
+
+      if (errorMsg) {
+        setVerificationItems((prev) =>
+          prev.map((item) =>
+            item.name === imageName
+              ? { ...item, reprocessing: false, streamingContent: null, transcriptionError: errorMsg }
+              : item
+          )
+        );
+        return;
+      }
+
+      // Re-processing complete — reload the transcription from server
       setVerificationItems((prev) =>
         prev.map((item) =>
           item.name === imageName
             ? {
                 ...item,
                 reprocessing: false,
+                streamingContent: null,
                 transcriptionContent: null,
                 reviewStatus: "not-verified",
               }
@@ -307,7 +381,6 @@ export default function App() {
         )
       );
 
-      // Allow re-fetch by clearing the guard, then trigger reload
       transcriptionRequestedRef.current.delete(imageName);
       void loadTranscription(imageName);
     } catch (error) {
@@ -315,7 +388,7 @@ export default function App() {
       setVerificationItems((prev) =>
         prev.map((item) =>
           item.name === imageName
-            ? { ...item, reprocessing: false, transcriptionError: message }
+            ? { ...item, reprocessing: false, streamingContent: null, transcriptionError: message }
             : item
         )
       );

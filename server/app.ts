@@ -234,9 +234,43 @@ export function createReprocessHandler(deps: TranscriptionDeps) {
     const currentVersion = entry.currentVersion;
     const nextVersion = currentVersion + 1;
 
+    const wantsSse =
+      typeof req.headers.accept === "string" && req.headers.accept.includes("text/event-stream");
+
+    if (wantsSse) {
+      res.status(200);
+      res.setHeader("Content-Type", "text/event-stream");
+      res.setHeader("Cache-Control", "no-cache, no-transform");
+      res.setHeader("Connection", "keep-alive");
+      if (typeof res.flushHeaders === "function") {
+        try {
+          res.flushHeaders();
+        } catch (error) {
+          // Ignore flush errors in mock/test responses.
+        }
+      }
+    }
+
+    const sendSse = (message: string) => {
+      if (!wantsSse) {
+        return;
+      }
+      const sanitized = message.replace(/\r/g, "");
+      const lines = sanitized.split("\n");
+      for (const line of lines) {
+        res.write(`data: ${line}\n`);
+      }
+      res.write("\n");
+    };
+
     try {
       const { client, model } = await createClient();
-      const result = await runTranscription(client, model, imagePath);
+
+      sendSse(`[FILE_START] ${imageName}`);
+
+      const result = await runTranscription(client, model, imagePath, (message) => {
+        sendSse(message);
+      });
 
       saveVersionedTranscription(folder, imagePath, nextVersion, result);
 
@@ -248,6 +282,12 @@ export function createReprocessHandler(deps: TranscriptionDeps) {
       delete entry.verifiedAt;
       saveStatusFile(status, statusFilePath);
 
+      if (wantsSse) {
+        sendSse(`[FILE_DONE] ${imageName}`);
+        res.end();
+        return;
+      }
+
       return res.json({
         imageName,
         version: nextVersion,
@@ -257,6 +297,12 @@ export function createReprocessHandler(deps: TranscriptionDeps) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       entry.error = errorMessage;
       saveStatusFile(status, statusFilePath);
+
+      if (wantsSse) {
+        sendSse(`[FILE_ERROR] ${imageName} | ${errorMessage}`);
+        res.end();
+        return;
+      }
 
       return res.status(500).json({
         error: errorMessage,

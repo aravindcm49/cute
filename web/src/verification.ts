@@ -12,6 +12,7 @@ export type VerificationItem = {
   transcriptionLoading: boolean;
   transcriptionError: string | null;
   reprocessing: boolean;
+  streamingContent: string | null;
 };
 
 type StatusMap = Record<string, { reviewStatus?: ReviewStatus }>;
@@ -51,6 +52,7 @@ export function buildVerificationItems(
     transcriptionLoading: false,
     transcriptionError: null,
     reprocessing: false,
+    streamingContent: null,
   }));
 
   return applyReviewStatuses(items, statusMap);

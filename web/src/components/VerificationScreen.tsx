@@ -79,19 +79,29 @@ export default function VerificationScreen({
         <div className="verification-transcription">
           <h3>Transcription</h3>
           <div className="transcription-content">
-            {current.transcriptionLoading && (
+            {current.reprocessing && current.streamingContent !== null && (
+              <div className="streaming-output">
+                <p className="loading-indicator muted">
+                  <span className="spinner" />
+                  Re-processing...
+                </p>
+                <pre className="streaming-text">{current.streamingContent}</pre>
+              </div>
+            )}
+            {current.transcriptionLoading && !current.reprocessing && (
               <p className="loading-indicator muted">
                 <span className="spinner" />
                 Loading transcription...
               </p>
             )}
-            {current.transcriptionError && (
+            {!current.reprocessing && current.transcriptionError && (
               <p className="error">{current.transcriptionError}</p>
             )}
-            {current.transcriptionContent && (
+            {!current.reprocessing && !current.transcriptionLoading && current.transcriptionContent && (
               <Markdown>{current.transcriptionContent}</Markdown>
             )}
-            {!current.transcriptionLoading &&
+            {!current.reprocessing &&
+              !current.transcriptionLoading &&
               !current.transcriptionError &&
               !current.transcriptionContent && (
                 <p className="muted">No transcription available.</p>
