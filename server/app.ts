@@ -552,6 +552,62 @@ export function createApp(overrides: Partial<TranscriptionDeps> = {}) {
     return res.json({ imageName, content, version });
   });
 
+  app.put("/api/transcription/:imageName", (req, res) => {
+    const folder = typeof req.body?.folder === "string" ? req.body.folder : "";
+    if (folder.trim().length === 0) {
+      return res.status(400).json({ error: "Folder path is required." });
+    }
+
+    if (!fs.existsSync(folder)) {
+      return res.status(404).json({ error: "Folder not found." });
+    }
+
+    if (!isDirectory(folder)) {
+      return res.status(400).json({ error: "Provided path is not a directory." });
+    }
+
+    const imageName = req.params.imageName;
+    if (typeof imageName !== "string" || imageName.trim().length === 0) {
+      return res.status(400).json({ error: "Image name is required." });
+    }
+
+    if (imageName !== path.basename(imageName)) {
+      return res.status(400).json({ error: "Invalid image name." });
+    }
+
+    const { content } = req.body ?? {};
+    if (typeof content !== "string") {
+      return res.status(400).json({ error: "content is required." });
+    }
+
+    const baseName = path.basename(imageName, path.extname(imageName));
+
+    // Check status file for version info
+    const statusFilePath = path.join(folder, config.statusFile);
+    const status = fs.existsSync(statusFilePath) ? loadStatusFile(statusFilePath) : {};
+    const imagePath = path.join(folder, imageName);
+    const entry = status[imagePath];
+    const version = entry?.currentVersion ?? 1;
+
+    // Resolve the correct versioned file path
+    let mdPath: string;
+    if (version > 1) {
+      mdPath = path.join(folder, `${baseName}_v${version}.md`);
+      if (!fs.existsSync(mdPath)) {
+        mdPath = path.join(folder, `${baseName}.md`);
+      }
+    } else {
+      mdPath = path.join(folder, `${baseName}.md`);
+    }
+
+    if (!fs.existsSync(mdPath)) {
+      return res.status(404).json({ error: "Transcription not found for this image." });
+    }
+
+    fs.writeFileSync(mdPath, content, "utf-8");
+    return res.json({ imageName, content, version });
+  });
+
   app.get("/api/image/:imageName", (req, res) => {
     const folder = typeof req.query.folder === "string" ? req.query.folder : "";
     if (folder.trim().length === 0) {

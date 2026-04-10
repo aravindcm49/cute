@@ -8,6 +8,8 @@ type VerificationScreenProps = {
   currentIndex: number;
   folderPath: string;
   isFullscreenOpen: boolean;
+  isEditing: boolean;
+  editContent: string;
   onPrev: () => void;
   onNext: () => void;
   onUpdateStatus: (imageName: string, status: ReviewStatus) => void;
@@ -16,6 +18,10 @@ type VerificationScreenProps = {
   onOpenFullscreen: () => void;
   onCloseFullscreen: () => void;
   onViewSummary: () => void;
+  onEditStart: () => void;
+  onEditChange: (content: string) => void;
+  onEditSave: () => void;
+  onEditCancel: () => void;
 };
 
 export default function VerificationScreen({
@@ -23,6 +29,8 @@ export default function VerificationScreen({
   currentIndex,
   folderPath,
   isFullscreenOpen,
+  isEditing,
+  editContent,
   onPrev,
   onNext,
   onUpdateStatus,
@@ -31,6 +39,10 @@ export default function VerificationScreen({
   onOpenFullscreen,
   onCloseFullscreen,
   onViewSummary,
+  onEditStart,
+  onEditChange,
+  onEditSave,
+  onEditCancel,
 }: VerificationScreenProps) {
   const current = items[currentIndex];
 
@@ -77,7 +89,19 @@ export default function VerificationScreen({
         </div>
 
         <div className="verification-transcription">
-          <h3>Transcription</h3>
+          <div className="verification-transcription-header">
+            <h3>Transcription</h3>
+            {!current.reprocessing && !current.transcriptionLoading && current.transcriptionContent && (
+              isEditing ? (
+                <div className="edit-actions">
+                  <button type="button" className="secondary" onClick={onEditSave}>Save</button>
+                  <button type="button" className="secondary" onClick={onEditCancel}>Cancel</button>
+                </div>
+              ) : (
+                <button type="button" className="secondary" onClick={onEditStart}>Edit</button>
+              )
+            )}
+          </div>
           <div className="transcription-content">
             {current.reprocessing && current.streamingContent !== null && (
               <div className="streaming-output">
@@ -98,7 +122,15 @@ export default function VerificationScreen({
               <p className="error">{current.transcriptionError}</p>
             )}
             {!current.reprocessing && !current.transcriptionLoading && current.transcriptionContent && (
-              <Markdown>{current.transcriptionContent}</Markdown>
+              isEditing ? (
+                <textarea
+                  className="edit-textarea"
+                  value={editContent}
+                  onChange={(e) => onEditChange(e.target.value)}
+                />
+              ) : (
+                <Markdown>{current.transcriptionContent}</Markdown>
+              )
             )}
             {!current.reprocessing &&
               !current.transcriptionLoading &&

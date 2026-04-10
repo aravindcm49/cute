@@ -109,6 +109,127 @@ describe("GET /api/transcription/:imageName", () => {
   });
 });
 
+describe("PUT /api/transcription/:imageName", () => {
+  let tempDir: string;
+
+  beforeEach(() => {
+    tempDir = createTempDir();
+    fs.writeFileSync(path.join(tempDir, "slide_001.jpg"), "");
+  });
+
+  afterEach(() => {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it("writes content to the transcription file and returns updated content", async () => {
+    const originalContent = "# Slide 001\n\nOriginal.\n";
+    fs.writeFileSync(path.join(tempDir, "slide_001.md"), originalContent);
+
+    const newContent = "# Slide 001\n\n## Description\n\nEdited description.\n";
+    const app = createApp();
+    const res = await invokeApp(app, {
+      method: "PUT",
+      url: `/api/transcription/slide_001.jpg`,
+      params: { imageName: "slide_001.jpg" },
+      body: { folder: tempDir, content: newContent },
+    });
+
+    expect(res._getStatusCode()).toBe(200);
+    const body = res._getJSONData();
+    expect(body.imageName).toBe("slide_001.jpg");
+    expect(body.content).toBe(newContent);
+
+    // Verify file was actually written
+    const onDisk = fs.readFileSync(path.join(tempDir, "slide_001.md"), "utf-8");
+    expect(onDisk).toBe(newContent);
+  });
+
+  it("writes to the versioned file when version > 1", async () => {
+    const v2Content = "# Slide 001 v2\n";
+    fs.writeFileSync(path.join(tempDir, "slide_001_v2.md"), v2Content);
+
+    const statusFile = path.join(tempDir, "transcription-status.json");
+    const status: Record<string, any> = {};
+    status[path.join(tempDir, "slide_001.jpg")] = {
+      processingStatus: "completed",
+      reviewStatus: "not-verified",
+      currentVersion: 2,
+    };
+    fs.writeFileSync(statusFile, JSON.stringify(status, null, 2));
+
+    const newContent = "# Slide 001 v2 edited\n";
+    const app = createApp();
+    const res = await invokeApp(app, {
+      method: "PUT",
+      url: `/api/transcription/slide_001.jpg`,
+      params: { imageName: "slide_001.jpg" },
+      body: { folder: tempDir, content: newContent },
+    });
+
+    expect(res._getStatusCode()).toBe(200);
+    const body = res._getJSONData();
+    expect(body.content).toBe(newContent);
+    expect(body.version).toBe(2);
+
+    const onDisk = fs.readFileSync(path.join(tempDir, "slide_001_v2.md"), "utf-8");
+    expect(onDisk).toBe(newContent);
+  });
+
+  it("returns 404 when transcription file does not exist", async () => {
+    const app = createApp();
+    const res = await invokeApp(app, {
+      method: "PUT",
+      url: `/api/transcription/slide_001.jpg`,
+      params: { imageName: "slide_001.jpg" },
+      body: { folder: tempDir, content: "new content" },
+    });
+
+    expect(res._getStatusCode()).toBe(404);
+    const body = res._getJSONData();
+    expect(body.error).toContain("Transcription");
+  });
+
+  it("returns 400 when folder is missing", async () => {
+    const app = createApp();
+    const res = await invokeApp(app, {
+      method: "PUT",
+      url: `/api/transcription/slide_001.jpg`,
+      params: { imageName: "slide_001.jpg" },
+      body: { content: "new content" },
+    });
+
+    expect(res._getStatusCode()).toBe(400);
+  });
+
+  it("returns 400 when content is missing", async () => {
+    const app = createApp();
+    const res = await invokeApp(app, {
+      method: "PUT",
+      url: `/api/transcription/slide_001.jpg`,
+      params: { imageName: "slide_001.jpg" },
+      body: { folder: tempDir },
+    });
+
+    expect(res._getStatusCode()).toBe(400);
+    const body = res._getJSONData();
+    expect(body.error).toContain("content");
+  });
+
+  it("rejects image names with path separators", async () => {
+    const app = createApp();
+    const res = await invokeApp(app, {
+      method: "PUT",
+      url: `/api/transcription/..%2Fetc%2Fpasswd`,
+      params: { imageName: "sub/file.jpg" },
+      body: { folder: tempDir, content: "malicious" },
+    });
+
+    expect(res._getStatusCode()).toBe(400);
+    const body = res._getJSONData();
+    expect(body.error).toContain("Invalid");
+  });
+});
+
 describe("GET /api/image/:imageName", () => {
   let tempDir: string;
 

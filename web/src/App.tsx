@@ -45,6 +45,8 @@ export default function App() {
   const [verificationItems, setVerificationItems] = useState<VerificationItem[]>([]);
   const [verificationIndex, setVerificationIndex] = useState(0);
   const transcriptionRequestedRef = useRef<Set<string>>(new Set());
+  const [isEditing, setIsEditing] = useState(false);
+  const [editContent, setEditContent] = useState("");
 
   // Summary state
   const [summaryStatusEntries, setSummaryStatusEntries] = useState<
@@ -396,11 +398,67 @@ export default function App() {
   }
 
   function handleVerificationPrev() {
+    setIsEditing(false);
     setVerificationIndex((prev) => Math.max(0, prev - 1));
   }
 
   function handleVerificationNext() {
+    setIsEditing(false);
     setVerificationIndex((prev) => Math.min(verificationItems.length - 1, prev + 1));
+  }
+
+  function handleEditStart() {
+    const current = verificationItems[verificationIndex];
+    if (current?.transcriptionContent) {
+      setEditContent(current.transcriptionContent);
+      setIsEditing(true);
+    }
+  }
+
+  function handleEditCancel() {
+    setIsEditing(false);
+    setEditContent("");
+  }
+
+  async function handleEditSave() {
+    const current = verificationItems[verificationIndex];
+    if (!current) return;
+
+    try {
+      const res = await fetch(
+        `/api/transcription/${encodeURIComponent(current.name)}`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ folder: folderPath, content: editContent }),
+        }
+      );
+
+      if (!res.ok) {
+        const payload = await res.json().catch(() => ({}));
+        throw new Error(payload.error || "Failed to save transcription.");
+      }
+
+      const payload = await res.json();
+      setVerificationItems((prev) =>
+        prev.map((item) =>
+          item.name === current.name
+            ? { ...item, transcriptionContent: payload.content }
+            : item
+        )
+      );
+      setIsEditing(false);
+      setEditContent("");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to save transcription.";
+      setVerificationItems((prev) =>
+        prev.map((item) =>
+          item.name === current.name
+            ? { ...item, transcriptionError: message }
+            : item
+        )
+      );
+    }
   }
 
   // Check if all items are verified and auto-show summary
@@ -454,6 +512,8 @@ export default function App() {
     recentChunksRef.current = [];
     setVerificationItems([]);
     setVerificationIndex(0);
+    setIsEditing(false);
+    setEditContent("");
     setSummaryStatusEntries([]);
     setScreen("folder");
   }
@@ -681,6 +741,8 @@ export default function App() {
               currentIndex={verificationIndex}
               folderPath={folderPath}
               isFullscreenOpen={isFullscreenOpen}
+              isEditing={isEditing}
+              editContent={editContent}
               onPrev={handleVerificationPrev}
               onNext={handleVerificationNext}
               onUpdateStatus={handleUpdateReviewStatus}
@@ -689,6 +751,10 @@ export default function App() {
               onOpenFullscreen={openFullscreen}
               onCloseFullscreen={closeFullscreen}
               onViewSummary={handleShowSummary}
+              onEditStart={handleEditStart}
+              onEditChange={setEditContent}
+              onEditSave={handleEditSave}
+              onEditCancel={handleEditCancel}
             />
           ) : screen === "summary" ? (
             (() => {
