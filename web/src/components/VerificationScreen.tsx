@@ -1,3 +1,4 @@
+import React from "react";
 import Markdown from "react-markdown";
 import ImageHoverZoom from "./ImageHoverZoom";
 import FullscreenImageModal from "./FullscreenImageModal";
@@ -13,7 +14,7 @@ type VerificationScreenProps = {
   onPrev: () => void;
   onNext: () => void;
   onUpdateStatus: (imageName: string, status: ReviewStatus) => void;
-  onReprocess: (imageName: string) => void;
+  onReprocess: (imageName: string, extraInstructions?: string) => void;
   onBackToProcessing: () => void;
   onOpenFullscreen: () => void;
   onCloseFullscreen: () => void;
@@ -45,6 +46,12 @@ export default function VerificationScreen({
   onEditCancel,
 }: VerificationScreenProps) {
   const current = items[currentIndex];
+  const [extraInstructions, setExtraInstructions] = React.useState("");
+
+  // Reset extra instructions when navigating to a different image
+  React.useEffect(() => {
+    setExtraInstructions("");
+  }, [currentIndex]);
 
   if (!current) {
     return (
@@ -167,20 +174,32 @@ export default function VerificationScreen({
           Verified
         </button>
         {current.reviewStatus === "needs-improvement" ? (
-          <button
-            type="button"
-            className="secondary"
-            onClick={() => onReprocess(current.name)}
-            disabled={current.reprocessing}
-          >
-            {current.reprocessing ? (
-              <>
-                <span className="spinner" /> Re-processing...
-              </>
-            ) : (
-              "Re-process"
-            )}
-          </button>
+          <>
+            <textarea
+              className="extra-instructions-textarea"
+              placeholder="What should the model focus on? (optional)"
+              value={extraInstructions}
+              onChange={(e) => setExtraInstructions(e.target.value)}
+              disabled={current.reprocessing}
+            />
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => {
+                onReprocess(current.name, extraInstructions || undefined);
+                setExtraInstructions("");
+              }}
+              disabled={current.reprocessing}
+            >
+              {current.reprocessing ? (
+                <>
+                  <span className="spinner" /> Re-processing...
+                </>
+              ) : (
+                "Re-process"
+              )}
+            </button>
+          </>
         ) : (
           <button
             type="button"

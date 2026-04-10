@@ -276,7 +276,7 @@ export default function App() {
     }
   }
 
-  async function handleReprocess(imageName: string) {
+  async function handleReprocess(imageName: string, extraInstructions?: string) {
     setVerificationItems((prev) =>
       prev.map((item) =>
         item.name === imageName
@@ -292,7 +292,7 @@ export default function App() {
           "Content-Type": "application/json",
           Accept: "text/event-stream",
         },
-        body: JSON.stringify({ folder: folderPath }),
+        body: JSON.stringify({ folder: folderPath, extraInstructions }),
       });
 
       if (!response.ok) {

@@ -15,7 +15,8 @@ function createTempDir(): string {
 async function invokeReprocess(
   folder: string,
   imageName: string,
-  deps?: Partial<TranscriptionDeps>
+  deps?: Partial<TranscriptionDeps>,
+  extraBody?: Record<string, unknown>
 ) {
   const supportedExtensions = new Set([".jpg", ".jpeg", ".png", ".webp"]);
   const fullDeps: TranscriptionDeps = {
@@ -35,7 +36,7 @@ async function invokeReprocess(
     url: `/api/reprocess/${imageName}`,
     params: { imageName },
     headers: { "content-type": "application/json" },
-    body: { folder },
+    body: { folder, ...extraBody },
   });
 
   await handler(req, res);
@@ -45,7 +46,8 @@ async function invokeReprocess(
 async function invokeReprocessSse(
   folder: string,
   imageName: string,
-  deps?: Partial<TranscriptionDeps>
+  deps?: Partial<TranscriptionDeps>,
+  extraBody?: Record<string, unknown>
 ) {
   const supportedExtensions = new Set([".jpg", ".jpeg", ".png", ".webp"]);
   const fullDeps: TranscriptionDeps = {
@@ -65,7 +67,7 @@ async function invokeReprocessSse(
     url: `/api/reprocess/${imageName}`,
     params: { imageName },
     headers: { "content-type": "application/json", accept: "text/event-stream" },
-    body: { folder },
+    body: { folder, ...extraBody },
   });
 
   await handler(req, res);
@@ -241,6 +243,77 @@ describe("POST /api/reprocess/:imageName", () => {
     const updatedStatus = JSON.parse(fs.readFileSync(statusPath, "utf-8"));
     const entry = updatedStatus[path.join(tempDir, "slide_001.jpg")];
     expect(entry.currentVersion).toBe(1);
+  });
+
+  it("passes extraInstructions to transcribeImage when provided", async () => {
+    const statusPath = path.join(tempDir, "transcription-status.json");
+    const status = {
+      [path.join(tempDir, "slide_001.jpg")]: {
+        processingStatus: "completed",
+        reviewStatus: "needs-improvement",
+        currentVersion: 1,
+      },
+    };
+    fs.writeFileSync(statusPath, JSON.stringify(status, null, 2));
+
+    const response = await invokeReprocess(tempDir, "slide_001.jpg", undefined, {
+      extraInstructions: "Look for the price list in the bottom-left corner",
+    });
+
+    expect(response._getStatusCode()).toBe(200);
+    expect(transcribeImageMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      expect.any(Function),
+      "Look for the price list in the bottom-left corner"
+    );
+  });
+
+  it("does not pass extraInstructions when not provided", async () => {
+    const statusPath = path.join(tempDir, "transcription-status.json");
+    const status = {
+      [path.join(tempDir, "slide_001.jpg")]: {
+        processingStatus: "completed",
+        reviewStatus: "needs-improvement",
+        currentVersion: 1,
+      },
+    };
+    fs.writeFileSync(statusPath, JSON.stringify(status, null, 2));
+
+    await invokeReprocess(tempDir, "slide_001.jpg");
+
+    expect(transcribeImageMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      expect.any(Function),
+      undefined
+    );
+  });
+
+  it("passes extraInstructions via SSE reprocess", async () => {
+    const statusPath = path.join(tempDir, "transcription-status.json");
+    const status = {
+      [path.join(tempDir, "slide_001.jpg")]: {
+        processingStatus: "completed",
+        reviewStatus: "needs-improvement",
+        currentVersion: 1,
+      },
+    };
+    fs.writeFileSync(statusPath, JSON.stringify(status, null, 2));
+
+    await invokeReprocessSse(tempDir, "slide_001.jpg", undefined, {
+      extraInstructions: "Focus on the chart data",
+    });
+
+    expect(transcribeImageMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      expect.any(Function),
+      "Focus on the chart data"
+    );
   });
 
   it("still returns JSON when Accept header is not text/event-stream", async () => {

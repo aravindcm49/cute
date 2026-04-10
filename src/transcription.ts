@@ -23,7 +23,8 @@ export async function transcribeImage(
   client: LMStudioClient,
   model: LLM,
   imagePath: string,
-  onProgress?: (msg: string) => void
+  onProgress?: (msg: string) => void,
+  extraInstructions?: string
 ): Promise<TranscriptionResult> {
   const image = await client.files.prepareImage(imagePath);
 
@@ -44,11 +45,10 @@ export async function transcribeImage(
     }
   };
 
-  const prediction = model.respond(
-    [
-      {
-        role: "user",
-        content: `You are a precise slide transcription assistant. This is a photograph of a presentation slide from a meetup.
+  const messages: Array<{ role: "user"; content: string; images?: unknown[] }> = [
+    {
+      role: "user",
+      content: `You are a precise slide transcription assistant. This is a photograph of a presentation slide from a meetup.
 
 Your task:
 1. Transcribe ALL text visible on the slide exactly as it appears — every line, bullet point, symbol, marker, and heading. Do not paraphrase or summarize the text. Preserve the original formatting, line breaks, and any special characters (e.g. (X), (!), arrows, etc.).
@@ -59,9 +59,19 @@ Important:
 - Focus ONLY on the projected slide/screen content.
 - Ignore any whiteboard, handwritten notes, or background elements.
 - Do NOT skip or abbreviate any text on the slide.`,
-        images: [image],
-      },
-    ],
+      images: [image],
+    },
+  ];
+
+  if (extraInstructions && extraInstructions.trim().length > 0) {
+    messages.push({
+      role: "user",
+      content: extraInstructions,
+    });
+  }
+
+  const prediction = model.respond(
+    messages as Parameters<typeof model.respond>[0],
     {
       structured: TranscriptionSchema,
       maxTokens: config.maxTokens,

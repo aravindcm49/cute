@@ -228,6 +228,8 @@ export function createReprocessHandler(deps: TranscriptionDeps) {
       return res.status(404).json({ error: "Image not found." });
     }
 
+    const extraInstructions = typeof req.body?.extraInstructions === "string" ? req.body.extraInstructions : undefined;
+
     const statusFilePath = path.join(folder, config.statusFile);
     const status = loadStatusFile(statusFilePath);
     const entry = ensureStatusEntry(status, imagePath);
@@ -270,7 +272,7 @@ export function createReprocessHandler(deps: TranscriptionDeps) {
 
       const result = await runTranscription(client, model, imagePath, (message) => {
         sendSse(message);
-      });
+      }, extraInstructions);
 
       saveVersionedTranscription(folder, imagePath, nextVersion, result);
 
