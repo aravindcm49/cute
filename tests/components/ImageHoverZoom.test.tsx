@@ -96,4 +96,91 @@ describe("ImageHoverZoom", () => {
 
     expect(onExpand).toHaveBeenCalledTimes(1);
   });
+
+  it("does not call onExpand when an input is focused", () => {
+    const onExpand = vi.fn();
+    render(
+      <>
+        <input type="text" data-testid="test-input" />
+        <ImageHoverZoom
+          src="/test.jpg"
+          alt="Preview"
+          onExpand={onExpand}
+          enableFullscreenShortcut={true}
+        />
+      </>
+    );
+
+    const input = screen.getByTestId("test-input");
+    input.focus();
+    fireEvent.keyDown(document, { key: "f" });
+
+    expect(onExpand).not.toHaveBeenCalled();
+  });
+
+  it("does not call onExpand when a textarea is focused", () => {
+    const onExpand = vi.fn();
+    render(
+      <>
+        <textarea data-testid="test-textarea" />
+        <ImageHoverZoom
+          src="/test.jpg"
+          alt="Preview"
+          onExpand={onExpand}
+          enableFullscreenShortcut={true}
+        />
+      </>
+    );
+
+    const textarea = screen.getByTestId("test-textarea");
+    textarea.focus();
+    fireEvent.keyDown(document, { key: "f" });
+
+    expect(onExpand).not.toHaveBeenCalled();
+  });
+
+  it("does not call onExpand when a contenteditable element is focused", () => {
+    const onExpand = vi.fn();
+    render(
+      <>
+        <div contentEditable data-testid="test-editable" />
+        <ImageHoverZoom
+          src="/test.jpg"
+          alt="Preview"
+          onExpand={onExpand}
+          enableFullscreenShortcut={true}
+        />
+      </>
+    );
+
+    const editable = screen.getByTestId("test-editable");
+    editable.focus();
+    fireEvent.keyDown(document, { key: "f" });
+
+    expect(onExpand).not.toHaveBeenCalled();
+  });
+
+  it("resumes calling onExpand after input loses focus", () => {
+    const onExpand = vi.fn();
+    render(
+      <>
+        <input type="text" data-testid="test-input" />
+        <ImageHoverZoom
+          src="/test.jpg"
+          alt="Preview"
+          onExpand={onExpand}
+          enableFullscreenShortcut={true}
+        />
+      </>
+    );
+
+    const input = screen.getByTestId("test-input");
+    input.focus();
+    fireEvent.keyDown(document, { key: "f" });
+    expect(onExpand).not.toHaveBeenCalled();
+
+    input.blur();
+    fireEvent.keyDown(document, { key: "f" });
+    expect(onExpand).toHaveBeenCalledTimes(1);
+  });
 });

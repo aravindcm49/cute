@@ -90,6 +90,16 @@ export default function ImageHoverZoom({
 
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "f" || event.key === "F") {
+        const active = document.activeElement;
+        if (
+          active instanceof HTMLElement &&
+          (active.tagName === "INPUT" ||
+            active.tagName === "TEXTAREA" ||
+            active.isContentEditable ||
+            active.hasAttribute("contenteditable"))
+        ) {
+          return;
+        }
         event.preventDefault();
         handleExpand();
       }
