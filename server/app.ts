@@ -113,11 +113,6 @@ function generateTrackingCsv(status: StatusFile): string {
   return [header, ...rows].join("\n") + "\n";
 }
 
-function writeTrackingCsv(folder: string, status: StatusFile): void {
-  const csvPath = path.join(folder, "transcription-tracking.csv");
-  const csv = generateTrackingCsv(status);
-  fs.writeFileSync(csvPath, csv, "utf-8");
-}
 
 export function createTranscribeHandler(deps: TranscriptionDeps) {
   return async (req: express.Request, res: express.Response) => {
@@ -826,7 +821,6 @@ export function createApp(overrides: Partial<TranscriptionDeps> & { healthDeps?:
     ensureStatusEntry(status, imagePath);
 
     updateReviewStatus(status, imagePath, reviewStatus, statusFilePath);
-    writeTrackingCsv(folder, status);
 
     return res.json({ folder, imagePath, status: status[imagePath] });
   });

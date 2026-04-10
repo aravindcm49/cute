@@ -90,7 +90,7 @@ describe("PATCH /api/review/:imageName", () => {
     expect(body.status.verifiedAt).toBeUndefined();
   });
 
-  it("writes CSV to session folder on review status change", async () => {
+  it("does not write CSV to disk on review status change", async () => {
     const statusPath = path.join(tempDir, "transcription-status.json");
     const status = {
       [path.join(tempDir, "slide_001.jpg")]: {
@@ -116,16 +116,7 @@ describe("PATCH /api/review/:imageName", () => {
     });
 
     const csvPath = path.join(tempDir, "transcription-tracking.csv");
-    expect(fs.existsSync(csvPath)).toBe(true);
-
-    const csv = fs.readFileSync(csvPath, "utf-8");
-    expect(csv).toContain("image_name");
-    expect(csv).toContain("processing_status");
-    expect(csv).toContain("review_status");
-    expect(csv).toContain("version");
-    expect(csv).toContain("verified_at");
-    expect(csv).toContain("notes");
-    expect(csv).toContain("slide_001.jpg");
+    expect(fs.existsSync(csvPath)).toBe(false);
   });
 
   it("returns 400 for invalid reviewStatus", async () => {
