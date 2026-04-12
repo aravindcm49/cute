@@ -70,12 +70,18 @@ body {
   color: #3f352b;
 }
 
-.field input {
+.field input,
+.field textarea {
   border-radius: 14px;
   border: 1px solid #d0c4b6;
   padding: 12px 14px;
   font-size: 1rem;
   background: #fffdfb;
+  font-family: inherit;
+}
+
+.field textarea {
+  resize: vertical;
 }
 
 .button-row {
@@ -909,4 +915,22 @@ button:disabled {
 
 .rename-error {
   margin: 4px 0 8px;
+}
+
+/* Edit & extra instruction textareas */
+.edit-textarea,
+.extra-instructions-textarea {
+  border-radius: 14px;
+  border: 1px solid #d0c4b6;
+  padding: 12px 14px;
+  font-size: 1rem;
+  font-family: inherit;
+  background: #fffdfb;
+  resize: vertical;
+  width: 100%;
+}
+
+.edit-actions {
+  display: flex;
+  gap: 8px;
 }
