@@ -357,7 +357,7 @@ export default function App() {
     }
   }
 
-  async function handleRename(oldName: string, newName: string) {
+  async function handleRename(oldName: string, newName: string): Promise<boolean> {
     setRenameLoading(true);
     setRenameError(null);
     try {
@@ -368,11 +368,12 @@ export default function App() {
       });
       if (res.status === 409) {
         setRenameError("A file with that name already exists.");
-        return;
+        return false;
       }
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || "Rename failed.");
+        setRenameError(data.error || "Rename failed.");
+        return false;
       }
       const data = await res.json();
       const newImageName: string = data.newImageName;
@@ -395,8 +396,10 @@ export default function App() {
       );
       // Reset suggestion tracking for renamed item
       suggestionRequestedRef.current.delete(oldName);
+      return true;
     } catch (error) {
       setRenameError(error instanceof Error ? error.message : "Rename failed.");
+      return false;
     } finally {
       setRenameLoading(false);
     }

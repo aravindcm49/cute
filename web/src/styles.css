@@ -365,6 +365,21 @@ button:disabled {
   min-width: 0;
 }
 
+.suggested-filename {
+  font-size: 0.85rem;
+  color: #7a6b5d;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 6px;
+  transition: background 0.15s;
+  white-space: nowrap;
+}
+
+.suggested-filename:hover {
+  background: #f0e7dd;
+  color: #3f352b;
+}
+
 .verification-split {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -882,26 +897,16 @@ button:disabled {
   padding: 4px 10px;
 }
 
-.rename-inline {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  padding: 8px 0;
-  margin-bottom: 8px;
-}
-
 .rename-input {
-  flex: 1;
-  min-width: 200px;
-  padding: 6px 10px;
-  border-radius: 8px;
+  min-width: 160px;
+  max-width: 260px;
+  padding: 4px 8px;
+  border-radius: 6px;
   border: 1px solid #ccc;
   font-family: inherit;
   font-size: 0.85rem;
 }
 
 .rename-error {
-  width: 100%;
-  margin: 4px 0 0;
+  margin: 4px 0 8px;
 }

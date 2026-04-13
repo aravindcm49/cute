@@ -25,7 +25,7 @@ type VerificationScreenProps = {
   onEditChange: (content: string) => void;
   onEditSave: () => void;
   onEditCancel: () => void;
-  onRename: (oldName: string, newName: string) => Promise<void>;
+  onRename: (oldName: string, newName: string) => Promise<boolean>;
 };
 
 export default function VerificationScreen({
@@ -69,9 +69,9 @@ export default function VerificationScreen({
   }
 
   async function handleRenameSubmit() {
-    if (!current || !editNameValue.trim()) return;
-    await onRename(current.name, editNameValue.trim());
-    setIsEditingName(false);
+    if (!current || !editNameValue.trim() || renameLoading) return;
+    const ok = await onRename(current.name, editNameValue.trim());
+    if (ok) setIsEditingName(false);
   }
 
   if (!current) {
