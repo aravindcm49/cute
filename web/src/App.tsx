@@ -49,8 +49,11 @@ export default function App() {
   const [verificationItems, setVerificationItems] = useState<VerificationItem[]>([]);
   const [verificationIndex, setVerificationIndex] = useState(0);
   const transcriptionRequestedRef = useRef<Set<string>>(new Set());
+  const suggestionRequestedRef = useRef<Set<string>>(new Set());
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState("");
+  const [renameLoading, setRenameLoading] = useState(false);
+  const [renameError, setRenameError] = useState<string | null>(null);
 
   // Summary state
   const [summaryStatusEntries, setSummaryStatusEntries] = useState<
@@ -210,6 +213,52 @@ export default function App() {
     [folderPath]
   );
 
+  const loadSuggestion = useCallback(
+    async (imageName: string) => {
+      setVerificationItems((prev) =>
+        prev.map((item) =>
+          item.name === imageName
+            ? { ...item, suggestLoading: true }
+            : item
+        )
+      );
+
+      try {
+        const res = await fetch(
+          `/api/suggest-name/${encodeURIComponent(imageName)}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ folder: folderPath }),
+          }
+        );
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || "Failed to get suggestion.");
+        }
+        const data = await res.json();
+        setVerificationItems((prev) =>
+          prev.map((item) =>
+            item.name === imageName
+              ? { ...item, suggestedFilename: data.suggestedFilename, suggestLoading: false }
+              : item
+          )
+        );
+      } catch {
+        setVerificationItems((prev) =>
+          prev.map((item) =>
+            item.name === imageName
+              ? { ...item, suggestLoading: false }
+              : item
+          )
+        );
+        // Don't add to ref so it can be retried
+        suggestionRequestedRef.current.delete(imageName);
+      }
+    },
+    [folderPath]
+  );
+
   // Load transcription when verification index changes
   useEffect(() => {
     if (screen !== "verification" || verificationItems.length === 0) {
@@ -226,6 +275,21 @@ export default function App() {
       void loadTranscription(current.name);
     }
   }, [screen, verificationIndex, verificationItems, loadTranscription]);
+
+  // Auto-fetch suggested filename when navigating to a verification item
+  useEffect(() => {
+    if (screen !== "verification" || verificationItems.length === 0) return;
+    const current = verificationItems[verificationIndex];
+    if (
+      current &&
+      current.suggestedFilename === undefined &&
+      !current.suggestLoading &&
+      !suggestionRequestedRef.current.has(current.name)
+    ) {
+      suggestionRequestedRef.current.add(current.name);
+      void loadSuggestion(current.name);
+    }
+  }, [screen, verificationIndex, verificationItems, loadSuggestion]);
 
   // Fetch latest review statuses when entering verification
   useEffect(() => {
@@ -290,6 +354,51 @@ export default function App() {
           item.name === imageName ? { ...item, transcriptionError: message } : item
         )
       );
+    }
+  }
+
+  async function handleRename(oldName: string, newName: string) {
+    setRenameLoading(true);
+    setRenameError(null);
+    try {
+      const res = await fetch(`/api/rename/${encodeURIComponent(oldName)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ folder: folderPath, newName }),
+      });
+      if (res.status === 409) {
+        setRenameError("A file with that name already exists.");
+        return;
+      }
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Rename failed.");
+      }
+      const data = await res.json();
+      const newImageName: string = data.newImageName;
+      const newImagePath: string = data.newImagePath;
+      // Update verificationItems in-place
+      setVerificationItems((prev) =>
+        prev.map((item) =>
+          item.name === oldName
+            ? { ...item, name: newImageName, suggestedFilename: undefined, suggestLoading: false }
+            : item
+        )
+      );
+      // Update images in-place
+      setImages((prev) =>
+        prev.map((img) =>
+          img.name === oldName
+            ? { ...img, name: newImageName, path: newImagePath }
+            : img
+        )
+      );
+      // Reset suggestion tracking for renamed item
+      suggestionRequestedRef.current.delete(oldName);
+    } catch (error) {
+      setRenameError(error instanceof Error ? error.message : "Rename failed.");
+    } finally {
+      setRenameLoading(false);
     }
   }
 
@@ -532,6 +641,8 @@ export default function App() {
     setVerificationIndex(0);
     setIsEditing(false);
     setEditContent("");
+    setRenameLoading(false);
+    setRenameError(null);
     setSummaryStatusEntries([]);
     setScreen("folder");
   }
@@ -786,6 +897,8 @@ export default function App() {
               isFullscreenOpen={isFullscreenOpen}
               isEditing={isEditing}
               editContent={editContent}
+              renameLoading={renameLoading}
+              renameError={renameError}
               onPrev={handleVerificationPrev}
               onNext={handleVerificationNext}
               onUpdateStatus={handleUpdateReviewStatus}
@@ -798,6 +911,7 @@ export default function App() {
               onEditChange={setEditContent}
               onEditSave={handleEditSave}
               onEditCancel={handleEditCancel}
+              onRename={handleRename}
             />
           ) : screen === "summary" ? (
             (() => {

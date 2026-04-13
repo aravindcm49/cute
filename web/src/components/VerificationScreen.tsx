@@ -11,6 +11,8 @@ type VerificationScreenProps = {
   isFullscreenOpen: boolean;
   isEditing: boolean;
   editContent: string;
+  renameLoading: boolean;
+  renameError: string | null;
   onPrev: () => void;
   onNext: () => void;
   onUpdateStatus: (imageName: string, status: ReviewStatus) => void;
@@ -23,6 +25,7 @@ type VerificationScreenProps = {
   onEditChange: (content: string) => void;
   onEditSave: () => void;
   onEditCancel: () => void;
+  onRename: (oldName: string, newName: string) => Promise<void>;
 };
 
 export default function VerificationScreen({
@@ -32,6 +35,8 @@ export default function VerificationScreen({
   isFullscreenOpen,
   isEditing,
   editContent,
+  renameLoading,
+  renameError,
   onPrev,
   onNext,
   onUpdateStatus,
@@ -44,77 +49,29 @@ export default function VerificationScreen({
   onEditChange,
   onEditSave,
   onEditCancel,
+  onRename,
 }: VerificationScreenProps) {
   const current = items[currentIndex];
   const [extraInstructions, setExtraInstructions] = React.useState("");
-  const [renameOpen, setRenameOpen] = React.useState(false);
-  const [renameValue, setRenameValue] = React.useState("");
-  const [renameLoading, setRenameLoading] = React.useState(false);
-  const [renameError, setRenameError] = React.useState<string | null>(null);
-  const [suggestLoading, setSuggestLoading] = React.useState(false);
+  const [isEditingName, setIsEditingName] = React.useState(false);
+  const [editNameValue, setEditNameValue] = React.useState("");
 
   React.useEffect(() => {
     setExtraInstructions("");
-    setRenameOpen(false);
-    setRenameValue("");
-    setRenameError(null);
+    setIsEditingName(false);
+    setEditNameValue("");
   }, [currentIndex]);
 
-  function handleRenameOpen() {
-    setRenameValue(current?.suggestedFilename ?? "");
-    setRenameError(null);
-    setRenameOpen(true);
+  function handleStartNameEdit() {
+    if (!current || current.suggestLoading) return;
+    setEditNameValue(current.suggestedFilename ?? "");
+    setIsEditingName(true);
   }
 
-  async function handleRename() {
-    if (!current || !renameValue.trim()) return;
-    setRenameLoading(true);
-    setRenameError(null);
-    try {
-      const res = await fetch(`/api/rename/${encodeURIComponent(current.name)}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ folder: folderPath, newName: renameValue.trim() }),
-      });
-      if (res.status === 409) {
-        setRenameError("A file with that name already exists.");
-        return;
-      }
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || "Rename failed.");
-      }
-      // Reload the page to reflect rename
-      window.location.reload();
-    } catch (error) {
-      setRenameError(error instanceof Error ? error.message : "Rename failed.");
-    } finally {
-      setRenameLoading(false);
-    }
-  }
-
-  async function handleResuggest() {
-    if (!current) return;
-    setSuggestLoading(true);
-    try {
-      const res = await fetch(`/api/suggest-name/${encodeURIComponent(current.name)}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ folder: folderPath }),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || "Suggest failed.");
-      }
-      const data = await res.json();
-      if (data.suggestedFilename) {
-        setRenameValue(data.suggestedFilename);
-      }
-    } catch (error) {
-      setRenameError(error instanceof Error ? error.message : "Suggestion failed.");
-    } finally {
-      setSuggestLoading(false);
-    }
+  async function handleRenameSubmit() {
+    if (!current || !editNameValue.trim()) return;
+    await onRename(current.name, editNameValue.trim());
+    setIsEditingName(false);
   }
 
   if (!current) {
@@ -138,36 +95,46 @@ export default function VerificationScreen({
       <div className="verification-header">
         <h2>Verification</h2>
         <span className="verification-filename">{current.name}</span>
-        <button type="button" className="secondary rename-btn" onClick={handleRenameOpen}>
-          Rename
-        </button>
+        {current.suggestLoading && <span className="spinner" />}
+        {!current.suggestLoading && current.suggestedFilename && !isEditingName && (
+          <span
+            className="suggested-filename"
+            onClick={handleStartNameEdit}
+            title="Click to edit and rename"
+          >
+            → {current.suggestedFilename}
+          </span>
+        )}
+        {isEditingName && (
+          <>
+            <input
+              type="text"
+              className="rename-input"
+              value={editNameValue}
+              onChange={(e) => setEditNameValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleRenameSubmit();
+                if (e.key === "Escape") setIsEditingName(false);
+              }}
+              disabled={renameLoading}
+              autoFocus
+            />
+            <button
+              type="button"
+              className="primary"
+              onClick={handleRenameSubmit}
+              disabled={renameLoading || !editNameValue.trim()}
+            >
+              {renameLoading ? "Renaming..." : "Rename"}
+            </button>
+          </>
+        )}
         <span className="verification-position">
           {currentIndex + 1} of {items.length}
         </span>
       </div>
 
-      {renameOpen && (
-        <div className="rename-inline">
-          <input
-            type="text"
-            className="rename-input"
-            value={renameValue}
-            onChange={(e) => setRenameValue(e.target.value)}
-            placeholder="new-filename (without extension)"
-            disabled={renameLoading}
-          />
-          <button type="button" className="primary" onClick={handleRename} disabled={renameLoading || !renameValue.trim()}>
-            {renameLoading ? "Renaming..." : "Apply"}
-          </button>
-          <button type="button" className="secondary" onClick={handleResuggest} disabled={suggestLoading}>
-            {suggestLoading ? "Suggesting..." : "Re-suggest"}
-          </button>
-          <button type="button" className="secondary" onClick={() => setRenameOpen(false)} disabled={renameLoading}>
-            Cancel
-          </button>
-          {renameError && <p className="error rename-error">{renameError}</p>}
-        </div>
-      )}
+      {renameError && <p className="error rename-error">{renameError}</p>}
 
       <div className="verification-split">
         <div className="verification-image">

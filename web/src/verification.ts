@@ -14,6 +14,7 @@ export type VerificationItem = {
   reprocessing: boolean;
   streamingContent: string | null;
   suggestedFilename?: string;
+  suggestLoading: boolean;
 };
 
 type StatusMap = Record<string, { reviewStatus?: ReviewStatus; suggestedFilename?: string }>;
@@ -58,7 +59,8 @@ export function buildVerificationItems(
     transcriptionError: null,
     reprocessing: false,
     streamingContent: null,
-  }));
+    suggestLoading: false,
+  }))
 
   return applyReviewStatuses(items, statusMap);
 }
