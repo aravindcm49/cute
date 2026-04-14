@@ -5,6 +5,8 @@ export type ImageEntry = {
   path: string;
 };
 
+import type { ReprocessDisplayState } from "./components/reprocessChunks";
+
 export type VerificationItem = {
   name: string;
   reviewStatus: ReviewStatus;
@@ -12,7 +14,7 @@ export type VerificationItem = {
   transcriptionLoading: boolean;
   transcriptionError: string | null;
   reprocessing: boolean;
-  streamingContent: string | null;
+  streamingDisplay: ReprocessDisplayState | null;
   suggestedFilename?: string;
   suggestLoading: boolean;
 };
@@ -58,7 +60,7 @@ export function buildVerificationItems(
     transcriptionLoading: false,
     transcriptionError: null,
     reprocessing: false,
-    streamingContent: null,
+    streamingDisplay: null,
     suggestLoading: false,
   }))
 

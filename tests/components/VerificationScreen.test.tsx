@@ -11,7 +11,7 @@ function makeItem(overrides: Partial<VerificationItem> = {}): VerificationItem {
     transcriptionLoading: false,
     transcriptionError: null,
     reprocessing: false,
-    streamingContent: null,
+    streamingDisplay: null,
     suggestLoading: false,
     ...overrides,
   };
@@ -114,7 +114,7 @@ describe("VerificationScreen", () => {
     it("does not show Edit button when reprocessing", () => {
       const props = {
         ...defaultProps,
-        items: [makeItem({ reprocessing: true, streamingContent: "processing..." })],
+        items: [makeItem({ reprocessing: true, streamingDisplay: { lines: ["processing..."] } })],
       };
 
       render(<VerificationScreen {...props} />);
@@ -157,6 +157,47 @@ describe("VerificationScreen", () => {
       render(<VerificationScreen {...props} />);
       fireEvent.click(screen.getByText("Cancel"));
       expect(onEditCancel).toHaveBeenCalledOnce();
+    });
+  });
+
+  describe("Streaming display during re-processing", () => {
+    it("shows streaming output when reprocessing with display lines", () => {
+      const props = {
+        ...defaultProps,
+        items: [makeItem({
+          reprocessing: true,
+          streamingDisplay: { lines: ["Some text", "", "[Prompt processing: 75%]"] },
+        })],
+      };
+
+      render(<VerificationScreen {...props} />);
+      expect(screen.getByText("Re-processing...")).toBeInTheDocument();
+      expect(screen.getByText(/Some text.*Prompt processing: 75%/)).toBeInTheDocument();
+    });
+
+    it("hides streaming output when not reprocessing", () => {
+      const props = {
+        ...defaultProps,
+        items: [makeItem({ reprocessing: false, streamingDisplay: null })],
+      };
+
+      render(<VerificationScreen {...props} />);
+      expect(screen.queryByText("Re-processing...")).not.toBeInTheDocument();
+    });
+
+    it("renders rolling window content joined together", () => {
+      const props = {
+        ...defaultProps,
+        items: [makeItem({
+          reprocessing: true,
+          streamingDisplay: { lines: ["chunk1", "chunk2", "chunk3"] },
+        })],
+      };
+
+      const { container } = render(<VerificationScreen {...props} />);
+      const pre = container.querySelector(".streaming-text");
+      expect(pre).not.toBeNull();
+      expect(pre!.textContent).toBe("chunk1chunk2chunk3");
     });
   });
 });

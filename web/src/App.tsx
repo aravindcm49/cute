@@ -10,6 +10,7 @@ import {
   type ReviewStatus,
   type VerificationItem,
 } from "./verification";
+import { updateReprocessDisplay, INITIAL_DISPLAY_STATE } from "./components/reprocessChunks";
 
 type Screen = "folder" | "processing" | "verification" | "summary";
 
@@ -409,7 +410,7 @@ export default function App() {
     setVerificationItems((prev) =>
       prev.map((item) =>
         item.name === imageName
-          ? { ...item, reprocessing: true, transcriptionError: null, streamingContent: "", transcriptionContent: null }
+          ? { ...item, reprocessing: true, transcriptionError: null, streamingDisplay: INITIAL_DISPLAY_STATE, transcriptionContent: null }
           : item
       )
     );
@@ -436,7 +437,7 @@ export default function App() {
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
-      let accumulated = "";
+      let displayState = INITIAL_DISPLAY_STATE;
       let isDone = false;
       let errorMsg: string | null = null;
 
@@ -457,8 +458,14 @@ export default function App() {
           if (!data) continue;
 
           if (data.startsWith("[FILE_START]")) {
-            // Reset streaming content
-            accumulated = "";
+            displayState = INITIAL_DISPLAY_STATE;
+            setVerificationItems((prev) =>
+              prev.map((item) =>
+                item.name === imageName
+                  ? { ...item, streamingDisplay: displayState }
+                  : item
+              )
+            );
             continue;
           }
 
@@ -474,12 +481,12 @@ export default function App() {
             continue;
           }
 
-          // Token chunk
-          accumulated += data;
+          // Token chunk — update rolling display
+          displayState = updateReprocessDisplay(displayState, data);
           setVerificationItems((prev) =>
             prev.map((item) =>
               item.name === imageName
-                ? { ...item, streamingContent: accumulated }
+                ? { ...item, streamingDisplay: displayState }
                 : item
             )
           );
@@ -490,7 +497,7 @@ export default function App() {
         setVerificationItems((prev) =>
           prev.map((item) =>
             item.name === imageName
-              ? { ...item, reprocessing: false, streamingContent: null, transcriptionError: errorMsg }
+              ? { ...item, reprocessing: false, streamingDisplay: null, transcriptionError: errorMsg }
               : item
           )
         );
@@ -504,7 +511,7 @@ export default function App() {
             ? {
                 ...item,
                 reprocessing: false,
-                streamingContent: null,
+                streamingDisplay: null,
                 transcriptionContent: null,
                 reviewStatus: "not-verified",
               }
@@ -519,7 +526,7 @@ export default function App() {
       setVerificationItems((prev) =>
         prev.map((item) =>
           item.name === imageName
-            ? { ...item, reprocessing: false, streamingContent: null, transcriptionError: message }
+            ? { ...item, reprocessing: false, streamingDisplay: null, transcriptionError: message }
             : item
         )
       );

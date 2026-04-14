@@ -157,13 +157,13 @@ export default function VerificationScreen({
             <h3>Transcription</h3>
           </div>
           <div className="transcription-content">
-            {current.reprocessing && current.streamingContent !== null && (
+            {current.reprocessing && current.streamingDisplay !== null && (
               <div className="streaming-output">
                 <p className="loading-indicator muted">
                   <span className="spinner" />
                   Re-processing...
                 </p>
-                <pre className="streaming-text">{current.streamingContent}</pre>
+                <pre className="streaming-text">{current.streamingDisplay.lines.join("")}</pre>
               </div>
             )}
             {current.transcriptionLoading && !current.reprocessing && (
