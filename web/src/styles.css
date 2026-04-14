@@ -933,4 +933,9 @@ button:disabled {
 .edit-actions {
   display: flex;
   gap: 8px;
+  margin-top: 12px;
+}
+
+.verification-transcription > .secondary:last-child {
+  margin-top: 12px;
 }

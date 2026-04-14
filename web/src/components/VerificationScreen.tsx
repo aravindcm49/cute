@@ -155,16 +155,6 @@ export default function VerificationScreen({
         <div className="verification-transcription">
           <div className="verification-transcription-header">
             <h3>Transcription</h3>
-            {!current.reprocessing && !current.transcriptionLoading && current.transcriptionContent && (
-              isEditing ? (
-                <div className="edit-actions">
-                  <button type="button" className="secondary" onClick={onEditSave}>Save</button>
-                  <button type="button" className="secondary" onClick={onEditCancel}>Cancel</button>
-                </div>
-              ) : (
-                <button type="button" className="secondary" onClick={onEditStart}>Edit</button>
-              )
-            )}
           </div>
           <div className="transcription-content">
             {current.reprocessing && current.streamingContent !== null && (
@@ -203,6 +193,16 @@ export default function VerificationScreen({
                 <p className="muted">No transcription available.</p>
               )}
           </div>
+          {!current.reprocessing && !current.transcriptionLoading && current.transcriptionContent && (
+            isEditing ? (
+              <div className="edit-actions">
+                <button type="button" className="primary" onClick={onEditSave}>Save</button>
+                <button type="button" className="secondary" onClick={onEditCancel}>Cancel</button>
+              </div>
+            ) : (
+              <button type="button" className="secondary" onClick={onEditStart}>Edit</button>
+            )
+          )}
         </div>
       </div>
 
