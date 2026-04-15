@@ -14,6 +14,7 @@ import {
 } from "../src/storage";
 import { getImageFiles } from "../src/transcription";
 import type { AiProvider } from "../src/ai-provider";
+import { createSseStream } from "./sse";
 
 const supportedExtensions = new Set([".jpg", ".jpeg", ".png", ".webp"]);
 const processingStatuses = new Set(["pending", "in_progress", "completed", "error"]);
@@ -73,34 +74,7 @@ export function createTranscribeHandler(deps: AiProviderDeps) {
       return res.status(400).json({ error: "Provided path is not a directory." });
     }
 
-    const wantsSse =
-      typeof req.headers.accept === "string" && req.headers.accept.includes("text/event-stream");
-
-    if (wantsSse) {
-      res.status(200);
-      res.setHeader("Content-Type", "text/event-stream");
-      res.setHeader("Cache-Control", "no-cache, no-transform");
-      res.setHeader("Connection", "keep-alive");
-      if (typeof res.flushHeaders === "function") {
-        try {
-          res.flushHeaders();
-        } catch (error) {
-          // Ignore flush errors in mock/test responses.
-        }
-      }
-    }
-
-    const sendSse = (message: string) => {
-      if (!wantsSse) {
-        return;
-      }
-      const sanitized = message.replace(/\r/g, "");
-      const lines = sanitized.split("\n");
-      for (const line of lines) {
-        res.write(`data: ${line}\n`);
-      }
-      res.write("\n");
-    };
+    const stream = createSseStream(req, res);
 
     const imagePaths = listImages(folder);
     const statusFilePath = path.join(folder, config.statusFile);
@@ -125,10 +99,9 @@ export function createTranscribeHandler(deps: AiProviderDeps) {
     const results: Array<{ imageName: string; status: string; error?: string }> = [];
 
     if (imagePaths.length === 0) {
-      sendSse("No images found to process.");
-      if (wantsSse) {
-        sendSse("[DONE]");
-        res.end();
+      if (stream) {
+        stream.emit("done");
+        stream.close();
         return;
       }
       return res.json({ folder, total: 0, processed: 0, skipped: 0, errors: 0, results });
@@ -140,13 +113,8 @@ export function createTranscribeHandler(deps: AiProviderDeps) {
       ? fs.readFileSync(customInstructionsPath, "utf-8").trim()
       : "";
 
-    let isClosed = false;
-    req.on("close", () => {
-      isClosed = true;
-    });
-
     for (const imagePath of imagePaths) {
-      if (isClosed) {
+      if (stream?.isClosed) {
         break;
       }
 
@@ -154,18 +122,18 @@ export function createTranscribeHandler(deps: AiProviderDeps) {
       if (status[imagePath]?.processingStatus === "completed") {
         skipped++;
         results.push({ imageName, status: "skipped" });
-        sendSse(`[FILE_SKIP] ${imageName}`);
+        stream?.emit("file_skip", { name: imageName });
         continue;
       }
 
-      sendSse(`[FILE_START] ${imageName}`);
+      stream?.emit("file_start", { name: imageName });
       try {
         updateFileStatus(status, imagePath, "in_progress", undefined, statusFilePath);
         const transcriptionOptions = customInstructions
           ? { extraInstructions: customInstructions }
           : undefined;
-        const transcription = await aiProvider.transcribe(imagePath, transcriptionOptions, (message) => {
-          sendSse(message);
+        const transcription = await aiProvider.transcribe(imagePath, transcriptionOptions, (delta) => {
+          stream?.emit("delta", { text: delta });
         });
         // Save to the image folder so verification can find it
         saveVersionedTranscription(folder, imagePath, 1, transcription);
@@ -176,19 +144,19 @@ export function createTranscribeHandler(deps: AiProviderDeps) {
         }
         completed++;
         results.push({ imageName, status: "completed" });
-        sendSse(`[FILE_DONE] ${imageName}`);
+        stream?.emit("file_done", { name: imageName });
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         updateFileStatus(status, imagePath, "error", errorMessage, statusFilePath);
         errors++;
         results.push({ imageName, status: "error", error: errorMessage });
-        sendSse(`[FILE_ERROR] ${imageName} | ${errorMessage}`);
+        stream?.emit("file_error", { name: imageName, error: errorMessage });
       }
     }
 
-    if (wantsSse) {
-      sendSse("[DONE]");
-      res.end();
+    if (stream) {
+      stream.emit("done");
+      stream.close();
       return;
     }
 
@@ -254,40 +222,13 @@ export function createReprocessHandler(deps: AiProviderDeps) {
     const currentVersion = entry.currentVersion;
     const nextVersion = currentVersion + 1;
 
-    const wantsSse =
-      typeof req.headers.accept === "string" && req.headers.accept.includes("text/event-stream");
-
-    if (wantsSse) {
-      res.status(200);
-      res.setHeader("Content-Type", "text/event-stream");
-      res.setHeader("Cache-Control", "no-cache, no-transform");
-      res.setHeader("Connection", "keep-alive");
-      if (typeof res.flushHeaders === "function") {
-        try {
-          res.flushHeaders();
-        } catch (error) {
-          // Ignore flush errors in mock/test responses.
-        }
-      }
-    }
-
-    const sendSse = (message: string) => {
-      if (!wantsSse) {
-        return;
-      }
-      const sanitized = message.replace(/\r/g, "");
-      const lines = sanitized.split("\n");
-      for (const line of lines) {
-        res.write(`data: ${line}\n`);
-      }
-      res.write("\n");
-    };
+    const stream = createSseStream(req, res);
 
     try {
-      sendSse(`[FILE_START] ${imageName}`);
+      stream?.emit("file_start", { name: imageName });
 
-      const result = await aiProvider.transcribe(imagePath, reprocessOptions, (message) => {
-        sendSse(message);
+      const result = await aiProvider.transcribe(imagePath, reprocessOptions, (delta) => {
+        stream?.emit("delta", { text: delta });
       });
 
       saveVersionedTranscription(folder, imagePath, nextVersion, result);
@@ -300,9 +241,9 @@ export function createReprocessHandler(deps: AiProviderDeps) {
       delete entry.verifiedAt;
       saveStatusFile(status, statusFilePath);
 
-      if (wantsSse) {
-        sendSse(`[FILE_DONE] ${imageName}`);
-        res.end();
+      if (stream) {
+        stream.emit("file_done", { name: imageName });
+        stream.close();
         return;
       }
 
@@ -316,9 +257,9 @@ export function createReprocessHandler(deps: AiProviderDeps) {
       entry.error = errorMessage;
       saveStatusFile(status, statusFilePath);
 
-      if (wantsSse) {
-        sendSse(`[FILE_ERROR] ${imageName} | ${errorMessage}`);
-        res.end();
+      if (stream) {
+        stream.emit("file_error", { name: imageName, error: errorMessage });
+        stream.close();
         return;
       }
 

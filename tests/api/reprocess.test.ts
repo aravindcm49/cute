@@ -190,7 +190,7 @@ describe("POST /api/reprocess/:imageName", () => {
     expect(fs.existsSync(mdPath)).toBe(true);
   });
 
-  it("returns SSE stream with FILE_START, token chunks, and FILE_DONE on success", async () => {
+  it("returns SSE stream with named events on success", async () => {
     const statusPath = path.join(tempDir, "transcription-status.json");
     const status = {
       [path.join(tempDir, "slide_001.jpg")]: {
@@ -207,10 +207,13 @@ describe("POST /api/reprocess/:imageName", () => {
     expect(response._getHeaders()["content-type"]).toContain("text/event-stream");
 
     const data = response._getData();
-    expect(data).toContain("[FILE_START] slide_001.jpg");
-    expect(data).toContain("token chunk 1");
-    expect(data).toContain("token chunk 2");
-    expect(data).toContain("[FILE_DONE] slide_001.jpg");
+    // Check for named SSE events
+    expect(data).toContain("event: file_start");
+    expect(data).toContain(`data: {"name":"slide_001.jpg"}`);
+    expect(data).toContain("event: delta");
+    expect(data).toContain(`data: {"text":"token chunk 1"}`);
+    expect(data).toContain(`data: {"text":"token chunk 2"}`);
+    expect(data).toContain("event: file_done");
 
     // Verify status and file were still updated
     const updatedStatus = JSON.parse(fs.readFileSync(statusPath, "utf-8"));
@@ -222,7 +225,7 @@ describe("POST /api/reprocess/:imageName", () => {
     expect(fs.existsSync(mdPath)).toBe(true);
   });
 
-  it("emits FILE_ERROR event on SSE stream when transcription fails", async () => {
+  it("emits file_error SSE event when transcription fails", async () => {
     const statusPath = path.join(tempDir, "transcription-status.json");
     const status = {
       [path.join(tempDir, "slide_001.jpg")]: {
@@ -239,8 +242,9 @@ describe("POST /api/reprocess/:imageName", () => {
 
     expect(response._getStatusCode()).toBe(200);
     const data = response._getData();
-    expect(data).toContain("[FILE_START] slide_001.jpg");
-    expect(data).toContain("[FILE_ERROR] slide_001.jpg | AI provider connection failed");
+    expect(data).toContain("event: file_start");
+    expect(data).toContain("event: file_error");
+    expect(data).toContain("AI provider connection failed");
 
     // Verify version was NOT incremented
     const updatedStatus = JSON.parse(fs.readFileSync(statusPath, "utf-8"));

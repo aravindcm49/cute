@@ -4,7 +4,7 @@ import * as os from "os";
 import * as path from "path";
 import { createMocks } from "node-mocks-http";
 import { createTranscribeHandler, type AiProviderDeps } from "../../server/app";
-import type { AiProvider, TranscriptionResult } from "../../src/ai-provider";
+import type { AiProvider } from "../../src/ai-provider";
 
 const aiProviderMock = {
   initialize: vi.fn(),
@@ -54,7 +54,7 @@ describe("POST /api/transcribe", () => {
     fs.writeFileSync(path.join(tempDir, "one.jpg"), "");
     fs.writeFileSync(path.join(tempDir, "two.png"), "");
     aiProviderMock.transcribe.mockImplementation(async (_imagePath: string, _options?: { extraInstructions?: string }, onDelta?: (text: string) => void) => {
-      onDelta?.("[mock] progress");
+      onDelta?.("mock progress");
       return { description: "desc", textContent: "text", keyInformation: [] };
     });
   });
@@ -92,15 +92,25 @@ describe("POST /api/transcribe", () => {
     expect(updated[path.join(tempDir, "one.jpg")].processingStatus).toBe("completed");
   });
 
-  it("streams progress updates when SSE is requested", async () => {
+  it("streams progress using named SSE events with JSON payloads", async () => {
     const response = await invokeTranscribe(tempDir, "text/event-stream");
 
     expect(response._getStatusCode()).toBe(200);
     expect(response._getHeaders()["content-type"]).toContain("text/event-stream");
 
     const data = response._getData();
-    expect(data).toContain("[mock]");
-    expect(data).toContain("data: [DONE]");
+
+    // Should contain named SSE events
+    expect(data).toContain("event: file_start");
+    expect(data).toContain("event: delta");
+    expect(data).toContain("event: file_done");
+    expect(data).toContain("event: done");
+
+    // Should contain JSON payloads
+    expect(data).toContain(`data: {"name":"one.jpg"}`);
+    expect(data).toContain(`data: {"name":"two.png"}`);
+    expect(data).toContain(`data: {"text":"mock progress"}`);
+    expect(data).toContain("data: {}");
   });
 
   it("passes custom instructions from folder to transcribe", async () => {

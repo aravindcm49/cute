@@ -445,47 +445,46 @@ export default function App() {
         buffer = events.pop() ?? "";
 
         for (const event of events) {
-          const dataLines = event
-            .split("\n")
-            .filter((line) => line.startsWith("data:"))
-            .map((line) => line.replace(/^data:\s?/, ""));
-          if (dataLines.length === 0) continue;
-          const data = dataLines.join("\n").trim();
-          if (!data) continue;
-
-          if (data.startsWith("[FILE_START]")) {
-            displayState = INITIAL_DISPLAY_STATE;
-            setVerificationItems((prev) =>
-              prev.map((item) =>
-                item.name === imageName
-                  ? { ...item, streamingDisplay: displayState }
-                  : item
-              )
-            );
-            continue;
+          let eventType = "";
+          let dataPayload = "";
+          for (const line of event.split("\n")) {
+            if (line.startsWith("event:")) {
+              eventType = line.replace(/^event:\s?/, "");
+            } else if (line.startsWith("data:")) {
+              dataPayload = line.replace(/^data:\s?/, "");
+            }
           }
+          if (!eventType) continue;
 
-          if (data.startsWith("[FILE_DONE]")) {
-            isDone = true;
-            continue;
+          try {
+            const parsed = JSON.parse(dataPayload);
+
+            if (eventType === "file_start") {
+              displayState = INITIAL_DISPLAY_STATE;
+              setVerificationItems((prev) =>
+                prev.map((item) =>
+                  item.name === imageName
+                    ? { ...item, streamingDisplay: displayState }
+                    : item
+                )
+              );
+            } else if (eventType === "file_done") {
+              isDone = true;
+            } else if (eventType === "file_error") {
+              errorMsg = parsed.error ?? "Unknown error";
+            } else if (eventType === "delta") {
+              displayState = updateReprocessDisplay(displayState, parsed.text ?? "");
+              setVerificationItems((prev) =>
+                prev.map((item) =>
+                  item.name === imageName
+                    ? { ...item, streamingDisplay: displayState }
+                    : item
+                )
+              );
+            }
+          } catch {
+            // Skip malformed events
           }
-
-          if (data.startsWith("[FILE_ERROR]")) {
-            const payload = data.replace("[FILE_ERROR]", "").trim();
-            const parts = payload.split("|");
-            errorMsg = parts.length > 1 ? parts.slice(1).join("|").trim() : parts[0]?.trim() ?? "Unknown error";
-            continue;
-          }
-
-          // Token chunk — update rolling display
-          displayState = updateReprocessDisplay(displayState, data);
-          setVerificationItems((prev) =>
-            prev.map((item) =>
-              item.name === imageName
-                ? { ...item, streamingDisplay: displayState }
-                : item
-            )
-          );
         }
       }
 
@@ -659,14 +658,9 @@ export default function App() {
     );
   }
 
-  function handleStreamMessage(message: string) {
-    const trimmed = message.trim();
-    if (!trimmed) {
-      return;
-    }
-
-    if (trimmed.startsWith("[FILE_START]")) {
-      const name = trimmed.replace("[FILE_START]", "").trim();
+  function handleStreamEvent(eventType: string, data: Record<string, unknown>) {
+    if (eventType === "file_start") {
+      const name = data.name as string;
       setCurrentFile(name);
       currentFileRef.current = name;
       recentChunksRef.current = [];
@@ -674,38 +668,39 @@ export default function App() {
       return;
     }
 
-    if (trimmed.startsWith("[FILE_DONE]")) {
-      const name = trimmed.replace("[FILE_DONE]", "").trim();
+    if (eventType === "file_done") {
+      const name = data.name as string;
       currentFileRef.current = null;
       recentChunksRef.current = [];
       updateEntry(name, { status: "completed", detail: undefined });
       return;
     }
 
-    if (trimmed.startsWith("[FILE_SKIP]")) {
-      const name = trimmed.replace("[FILE_SKIP]", "").trim();
+    if (eventType === "file_skip") {
+      const name = data.name as string;
       currentFileRef.current = null;
       recentChunksRef.current = [];
       updateEntry(name, { status: "skipped", detail: undefined });
       return;
     }
 
-    if (trimmed.startsWith("[FILE_ERROR]")) {
-      const payload = trimmed.replace("[FILE_ERROR]", "").trim();
-      const [namePart, errorPart] = payload.split("|");
-      const name = namePart?.trim() ?? "Unknown file";
-      const error = errorPart?.trim() ?? "Unknown error";
+    if (eventType === "file_error") {
+      const name = (data.name as string) ?? "Unknown file";
+      const error = (data.error as string) ?? "Unknown error";
       currentFileRef.current = null;
       recentChunksRef.current = [];
       updateEntry(name, { status: "error", error, detail: error });
       return;
     }
 
-    const activeFile = currentFileRef.current;
-    if (activeFile) {
-      // Keep last 3 chunks for context
-      recentChunksRef.current = [...recentChunksRef.current.slice(-2), trimmed];
-      updateEntry(activeFile, { detail: recentChunksRef.current.join(" ") });
+    if (eventType === "delta") {
+      const activeFile = currentFileRef.current;
+      if (activeFile) {
+        const text = data.text as string;
+        recentChunksRef.current = [...recentChunksRef.current.slice(-2), text];
+        updateEntry(activeFile, { detail: recentChunksRef.current.join(" ") });
+      }
+      return;
     }
   }
 
@@ -746,25 +741,31 @@ export default function App() {
         buffer = events.pop() ?? "";
 
         for (const event of events) {
-          const dataLines = event
-            .split("\n")
-            .filter((line) => line.startsWith("data:"))
-            .map((line) => line.replace(/^data:\s?/, ""));
-          if (dataLines.length === 0) {
-            continue;
+          let eventType = "";
+          let dataPayload = "";
+          for (const line of event.split("\n")) {
+            if (line.startsWith("event:" )) {
+              eventType = line.replace(/^event:\s?/, "");
+            } else if (line.startsWith("data:")) {
+              dataPayload = line.replace(/^data:\s?/, "");
+            }
           }
-          const data = dataLines.join("\n");
-          if (data.trim() === "[DONE]") {
+          if (!eventType) continue;
+
+          if (eventType === "done") {
             setProcessingState("done");
             return;
           }
-          handleStreamMessage(data);
+
+          try {
+            const parsed = JSON.parse(dataPayload);
+            handleStreamEvent(eventType, parsed);
+          } catch {
+            // Skip malformed events
+          }
         }
       }
 
-      if (buffer.trim().length > 0) {
-        handleStreamMessage(buffer.trim());
-      }
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to run transcription.";
       setProcessingError(message);
