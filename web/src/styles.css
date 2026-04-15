@@ -939,3 +939,31 @@ button:disabled {
 .verification-transcription > .secondary:last-child {
   margin-top: 12px;
 }
+
+/* Model Picker */
+.model-picker-area {
+  margin: 12px 0;
+}
+
+.model-picker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.model-picker-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #5a5048;
+}
+
+.model-picker select {
+  border-radius: 8px;
+  border: 1px solid #d0c4b6;
+  padding: 6px 10px;
+  font-size: 0.85rem;
+  font-family: inherit;
+  background: #fffdfb;
+  min-width: 200px;
+}

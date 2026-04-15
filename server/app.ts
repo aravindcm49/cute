@@ -754,6 +754,33 @@ export function createApp(deps: AiProviderDeps) {
 
   app.post("/api/suggest-name/:imageName", createSuggestNameHandler(deps));
 
+  app.get("/api/models", async (_req, res) => {
+    try {
+      const models = await deps.aiProvider.getAvailableModels();
+      const current = deps.aiProvider.getCurrentModel();
+      return res.json({ models, current });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to get models.";
+      return res.status(500).json({ error: message });
+    }
+  });
+
+  app.post("/api/model", async (req, res) => {
+    const { provider, modelId } = req.body ?? {};
+    if (typeof provider !== "string" || typeof modelId !== "string") {
+      return res.status(400).json({ error: "provider and modelId are required." });
+    }
+
+    try {
+      await deps.aiProvider.setModel(provider, modelId);
+      const current = deps.aiProvider.getCurrentModel();
+      return res.json({ current });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to switch model.";
+      return res.status(400).json({ error: message });
+    }
+  });
+
   app.post("/api/transcribe", createTranscribeHandler(deps));
 
   app.post("/api/rename/:imageName", (req, res) => {

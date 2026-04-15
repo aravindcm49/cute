@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import VerificationScreen from "./components/VerificationScreen";
+import { ModelPicker, type ModelInfo } from "./components/ModelPicker";
 import {
   applyReviewStatuses,
   buildVerificationItems,
@@ -43,6 +44,7 @@ export default function App() {
   const currentFileRef = useRef<string | null>(null);
   const recentChunksRef = useRef<string[]>([]);
   const [isFullscreenOpen, setIsFullscreenOpen] = useState(false);
+  const [currentModel, setCurrentModel] = useState<ModelInfo | null>(null);
 
   // Verification state
   const [verificationItems, setVerificationItems] = useState<VerificationItem[]>([]);
@@ -61,7 +63,7 @@ export default function App() {
 
   const justVerifiedRef = useRef(false);
 
-  const canRun = images.length > 0 && loadState === "success";
+  const canRun = images.length > 0 && loadState === "success" && currentModel !== null;
   const hasCompleted = processingState === "done";
 
   const displayList = useMemo(() => {
@@ -818,6 +820,10 @@ export default function App() {
               rows={3}
             />
           </label>
+
+          <div className="model-picker-area">
+            <ModelPicker onModelChange={setCurrentModel} />
+          </div>
 
           <div className="button-row">
             <button type="button" className="secondary" onClick={handleScan}>
