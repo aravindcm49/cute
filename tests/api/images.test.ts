@@ -4,6 +4,7 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 import { createApp } from "../../server/app";
+import { createTestDeps } from "../helpers";
 
 function createTempDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "sandcastle-images-"));
@@ -12,7 +13,7 @@ function createTempDir(): string {
 describe("GET /api/images", () => {
   let tempDir: string;
   async function invokeImages(folder?: string) {
-    const app = createApp();
+    const app = createApp(createTestDeps());
     const { req, res } = createMocks({
       method: "GET",
       url: "/api/images",

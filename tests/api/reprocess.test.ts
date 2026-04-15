@@ -3,10 +3,17 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 import { createMocks } from "node-mocks-http";
-import { createReprocessHandler, type TranscriptionDeps } from "../../server/app";
+import { createReprocessHandler, type AiProviderDeps } from "../../server/app";
+import type { AiProvider } from "../../src/ai-provider";
 
-const transcribeImageMock = vi.fn();
-const createTranscriptionClientMock = vi.fn();
+const aiProviderMock = {
+  initialize: vi.fn(),
+  transcribe: vi.fn(),
+  getAvailableModels: vi.fn(),
+  getCurrentModel: vi.fn(),
+  setModel: vi.fn(),
+  dispose: vi.fn(),
+} satisfies AiProvider;
 
 function createTempDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "sandcastle-reprocess-"));
@@ -15,13 +22,12 @@ function createTempDir(): string {
 async function invokeReprocess(
   folder: string,
   imageName: string,
-  deps?: Partial<TranscriptionDeps>,
+  deps?: Partial<AiProviderDeps>,
   extraBody?: Record<string, unknown>
 ) {
   const supportedExtensions = new Set([".jpg", ".jpeg", ".png", ".webp"]);
-  const fullDeps: TranscriptionDeps = {
-    createTranscriptionClient: deps?.createTranscriptionClient ?? createTranscriptionClientMock,
-    transcribeImage: deps?.transcribeImage ?? transcribeImageMock,
+  const fullDeps: AiProviderDeps = {
+    aiProvider: deps?.aiProvider ?? aiProviderMock,
     getImageFiles: deps?.getImageFiles ?? ((dir: string) => {
       const entries = fs.readdirSync(dir);
       return entries
@@ -46,13 +52,12 @@ async function invokeReprocess(
 async function invokeReprocessSse(
   folder: string,
   imageName: string,
-  deps?: Partial<TranscriptionDeps>,
+  deps?: Partial<AiProviderDeps>,
   extraBody?: Record<string, unknown>
 ) {
   const supportedExtensions = new Set([".jpg", ".jpeg", ".png", ".webp"]);
-  const fullDeps: TranscriptionDeps = {
-    createTranscriptionClient: deps?.createTranscriptionClient ?? createTranscriptionClientMock,
-    transcribeImage: deps?.transcribeImage ?? transcribeImageMock,
+  const fullDeps: AiProviderDeps = {
+    aiProvider: deps?.aiProvider ?? aiProviderMock,
     getImageFiles: deps?.getImageFiles ?? ((dir: string) => {
       const entries = fs.readdirSync(dir);
       return entries
@@ -81,18 +86,16 @@ describe("POST /api/reprocess/:imageName", () => {
     tempDir = createTempDir();
     fs.writeFileSync(path.join(tempDir, "slide_001.jpg"), "");
     fs.writeFileSync(path.join(tempDir, "slide_002.png"), "");
-    createTranscriptionClientMock.mockResolvedValue({ client: {}, model: {} });
-    transcribeImageMock.mockImplementation(async (_client: unknown, _model: unknown, _imagePath: string, onProgress?: (msg: string) => void) => {
-      onProgress?.("token chunk 1");
-      onProgress?.("token chunk 2");
-      return { description: "desc", textContent: "text", keyInformation: ["info"] };
+    aiProviderMock.transcribe.mockImplementation(async (_imagePath: string, _options?: { extraInstructions?: string }, onDelta?: (text: string) => void) => {
+      onDelta?.("token chunk 1");
+      onDelta?.("token chunk 2");
+      return { description: "desc", textContent: "text", keyInformation: ["info"], suggestedFilename: "slide-001" };
     });
   });
 
   afterEach(() => {
     fs.rmSync(tempDir, { recursive: true, force: true });
-    transcribeImageMock.mockReset();
-    createTranscriptionClientMock.mockReset();
+    aiProviderMock.transcribe.mockReset();
   });
 
   it("creates a versioned markdown file on successful re-process", async () => {
@@ -137,13 +140,13 @@ describe("POST /api/reprocess/:imageName", () => {
     };
     fs.writeFileSync(statusPath, JSON.stringify(status, null, 2));
 
-    transcribeImageMock.mockRejectedValue(new Error("LLM connection failed"));
+    aiProviderMock.transcribe.mockRejectedValue(new Error("AI provider connection failed"));
 
     const response = await invokeReprocess(tempDir, "slide_001.jpg");
 
     expect(response._getStatusCode()).toBe(500);
     const body = response._getJSONData();
-    expect(body.error).toContain("LLM connection failed");
+    expect(body.error).toContain("AI provider connection failed");
 
     // Verify version was NOT incremented
     const updatedStatus = JSON.parse(fs.readFileSync(statusPath, "utf-8"));
@@ -230,14 +233,14 @@ describe("POST /api/reprocess/:imageName", () => {
     };
     fs.writeFileSync(statusPath, JSON.stringify(status, null, 2));
 
-    transcribeImageMock.mockRejectedValue(new Error("LLM connection failed"));
+    aiProviderMock.transcribe.mockRejectedValue(new Error("AI provider connection failed"));
 
     const response = await invokeReprocessSse(tempDir, "slide_001.jpg");
 
     expect(response._getStatusCode()).toBe(200);
     const data = response._getData();
     expect(data).toContain("[FILE_START] slide_001.jpg");
-    expect(data).toContain("[FILE_ERROR] slide_001.jpg | LLM connection failed");
+    expect(data).toContain("[FILE_ERROR] slide_001.jpg | AI provider connection failed");
 
     // Verify version was NOT incremented
     const updatedStatus = JSON.parse(fs.readFileSync(statusPath, "utf-8"));
@@ -245,7 +248,7 @@ describe("POST /api/reprocess/:imageName", () => {
     expect(entry.currentVersion).toBe(1);
   });
 
-  it("passes extraInstructions to transcribeImage when provided", async () => {
+  it("passes extraInstructions to transcribe when provided", async () => {
     const statusPath = path.join(tempDir, "transcription-status.json");
     const status = {
       [path.join(tempDir, "slide_001.jpg")]: {
@@ -261,12 +264,10 @@ describe("POST /api/reprocess/:imageName", () => {
     });
 
     expect(response._getStatusCode()).toBe(200);
-    expect(transcribeImageMock).toHaveBeenCalledWith(
+    expect(aiProviderMock.transcribe).toHaveBeenCalledWith(
       expect.anything(),
-      expect.anything(),
-      expect.anything(),
+      { extraInstructions: "Look for the price list in the bottom-left corner" },
       expect.any(Function),
-      "Look for the price list in the bottom-left corner"
     );
   });
 
@@ -283,12 +284,10 @@ describe("POST /api/reprocess/:imageName", () => {
 
     await invokeReprocess(tempDir, "slide_001.jpg");
 
-    expect(transcribeImageMock).toHaveBeenCalledWith(
+    expect(aiProviderMock.transcribe).toHaveBeenCalledWith(
       expect.anything(),
-      expect.anything(),
-      expect.anything(),
+      undefined,
       expect.any(Function),
-      undefined
     );
   });
 
@@ -307,12 +306,10 @@ describe("POST /api/reprocess/:imageName", () => {
       extraInstructions: "Focus on the chart data",
     });
 
-    expect(transcribeImageMock).toHaveBeenCalledWith(
+    expect(aiProviderMock.transcribe).toHaveBeenCalledWith(
       expect.anything(),
-      expect.anything(),
-      expect.anything(),
+      { extraInstructions: "Focus on the chart data" },
       expect.any(Function),
-      "Focus on the chart data"
     );
   });
 
@@ -332,12 +329,10 @@ describe("POST /api/reprocess/:imageName", () => {
       extraInstructions: "Focus on the chart data",
     });
 
-    expect(transcribeImageMock).toHaveBeenCalledWith(
+    expect(aiProviderMock.transcribe).toHaveBeenCalledWith(
       expect.anything(),
-      expect.anything(),
-      expect.anything(),
+      { extraInstructions: "CAFI meetup about bartending\n\nFocus on the chart data" },
       expect.any(Function),
-      "CAFI meetup about bartending\n\nFocus on the chart data"
     );
   });
 
@@ -355,12 +350,10 @@ describe("POST /api/reprocess/:imageName", () => {
 
     await invokeReprocess(tempDir, "slide_001.jpg");
 
-    expect(transcribeImageMock).toHaveBeenCalledWith(
+    expect(aiProviderMock.transcribe).toHaveBeenCalledWith(
       expect.anything(),
-      expect.anything(),
-      expect.anything(),
+      { extraInstructions: "CAFI meetup about bartending" },
       expect.any(Function),
-      "CAFI meetup about bartending"
     );
   });
 

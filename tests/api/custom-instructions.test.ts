@@ -4,6 +4,7 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 import { createApp } from "../../server/app";
+import { createTestDeps } from "../helpers";
 
 function createTempDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "sandcastle-instructions-"));
@@ -29,7 +30,7 @@ describe("Custom Instructions API", () => {
 
   beforeEach(() => {
     tempDir = createTempDir();
-    app = createApp();
+    app = createApp(createTestDeps());
   });
 
   afterEach(() => {

@@ -4,6 +4,7 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 import { createApp } from "../../server/app";
+import { createTestDeps } from "../helpers";
 
 function createTempDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "sandcastle-status-"));
@@ -13,7 +14,7 @@ describe("/api/status", () => {
   let tempDir: string;
 
   async function invokeStatus(folder?: string) {
-    const app = createApp();
+    const app = createApp(createTestDeps());
     const { req, res } = createMocks({
       method: "GET",
       url: "/api/status",
@@ -40,7 +41,7 @@ describe("/api/status", () => {
     imageName: string,
     body: Record<string, unknown>
   ) {
-    const app = createApp();
+    const app = createApp(createTestDeps());
     const { req, res } = createMocks({
       method: "PATCH",
       url: `/api/status/${imageName}`,

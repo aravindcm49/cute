@@ -1,7 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import VerificationScreen from "./components/VerificationScreen";
-import HealthBanner from "./components/HealthBanner";
-import { useHealthCheck } from "./components/useHealthCheck";
 import {
   applyReviewStatuses,
   buildVerificationItems,
@@ -63,9 +61,7 @@ export default function App() {
 
   const justVerifiedRef = useRef(false);
 
-  const { health, refetch: refetchHealth } = useHealthCheck();
-
-  const canRun = images.length > 0 && loadState === "success" && health.status === "ready";
+  const canRun = images.length > 0 && loadState === "success";
   const hasCompleted = processingState === "done";
 
   const displayList = useMemo(() => {
@@ -786,8 +782,6 @@ export default function App() {
           Point the app at a folder of slides, verify the images found, then run transcription.
         </p>
       </header>
-
-      {screen === "folder" && <HealthBanner health={health} onCheckAgain={refetchHealth} />}
 
       {screen === "folder" ? (
         <section className="panel">

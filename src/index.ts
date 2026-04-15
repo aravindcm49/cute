@@ -6,11 +6,8 @@ import {
   updateFileStatus,
   type StatusFile,
 } from "./storage";
-import {
-  createTranscriptionClient,
-  transcribeImage,
-  getImageFiles,
-} from "./transcription";
+import { getImageFiles } from "./transcription";
+import { createAiProvider } from "./ai-provider";
 
 type RunMode = "pending" | "errors-only" | "all";
 
@@ -68,7 +65,11 @@ async function main() {
     process.exit(0);
   }
 
-  const { client, model } = await createTranscriptionClient();
+  const aiProvider = createAiProvider();
+  await aiProvider.initialize();
+
+  const modelInfo = aiProvider.getCurrentModel();
+  console.log(`Using model: ${modelInfo?.provider}/${modelInfo?.id}\n`);
 
   let completed = 0;
   let errors = 0;
@@ -92,9 +93,12 @@ async function main() {
     console.log(`\n[${i + 1}/${filesToProcess.length}] ${imageName}`);
 
     try {
-      await transcribeImage(client, model, imagePath);
+      const result = await aiProvider.transcribe(imagePath, undefined, (delta) => {
+        process.stdout.write(delta);
+      });
       updateFileStatus(status, imagePath, "completed");
       completed++;
+      console.log(`\n  [Done: ${imageName}]`);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       updateFileStatus(status, imagePath, "error", errorMessage);
@@ -102,6 +106,8 @@ async function main() {
       errors++;
     }
   }
+
+  aiProvider.dispose();
 
   const total = imageFiles.length;
   console.log(`\n--- Done ---`);

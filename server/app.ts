@@ -12,75 +12,17 @@ import {
   updateReviewStatus,
   type StatusFile,
 } from "../src/storage";
-import { createTranscriptionClient, getImageFiles, transcribeImage } from "../src/transcription";
+import { getImageFiles } from "../src/transcription";
+import type { AiProvider } from "../src/ai-provider";
 
 const supportedExtensions = new Set([".jpg", ".jpeg", ".png", ".webp"]);
 const processingStatuses = new Set(["pending", "in_progress", "completed", "error"]);
 const reviewStatuses = new Set(["not-verified", "verified", "needs-improvement"]);
 
-export type TranscriptionDeps = {
-  createTranscriptionClient: typeof createTranscriptionClient;
-  transcribeImage: typeof transcribeImage;
+export type AiProviderDeps = {
+  aiProvider: AiProvider;
   getImageFiles: typeof getImageFiles;
 };
-
-export type HealthDeps = {
-  createClient: () => Promise<unknown>;
-  listLoaded: (client: unknown) => Promise<Array<{ identifier: string }>>;
-  listDownloaded: (client: unknown) => Promise<Array<{ modelKey: string }>>;
-  loadModel: (modelKey: string, client: unknown) => Promise<unknown>;
-  modelName: string;
-};
-
-export function createHealthHandler(deps: HealthDeps) {
-  return async (_req: express.Request, res: express.Response) => {
-    let client: unknown;
-    try {
-      client = await deps.createClient();
-    } catch {
-      return res.json({ status: "no_connection", loadedModel: null, availableModels: [] });
-    }
-
-    let loadedModels: Array<{ identifier: string }>;
-    try {
-      loadedModels = await deps.listLoaded(client);
-    } catch {
-      return res.json({ status: "no_connection", loadedModel: null, availableModels: [] });
-    }
-
-    const isLoaded = loadedModels.some((m) => m.identifier === deps.modelName);
-    if (isLoaded) {
-      return res.json({ status: "ready", loadedModel: deps.modelName, availableModels: [] });
-    }
-
-    let downloadedModels: Array<{ modelKey: string }>;
-    try {
-      downloadedModels = await deps.listDownloaded(client);
-    } catch {
-      return res.json({ status: "no_connection", loadedModel: null, availableModels: [] });
-    }
-
-    const isDownloaded = downloadedModels.some((m) => m.modelKey === deps.modelName);
-    if (isDownloaded) {
-      try {
-        await deps.loadModel(deps.modelName, client);
-        return res.json({ status: "ready", loadedModel: deps.modelName, availableModels: [] });
-      } catch {
-        return res.json({
-          status: "no_model",
-          loadedModel: null,
-          availableModels: downloadedModels.map((m) => m.modelKey),
-        });
-      }
-    }
-
-    return res.json({
-      status: "no_model",
-      loadedModel: null,
-      availableModels: downloadedModels.map((m) => m.modelKey),
-    });
-  };
-}
 
 function isDirectory(folderPath: string): boolean {
   try {
@@ -114,10 +56,9 @@ function generateTrackingCsv(status: StatusFile): string {
 }
 
 
-export function createTranscribeHandler(deps: TranscriptionDeps) {
+export function createTranscribeHandler(deps: AiProviderDeps) {
   return async (req: express.Request, res: express.Response) => {
-    const { createTranscriptionClient: createClient, transcribeImage: runTranscription, getImageFiles: listImages } =
-      deps;
+    const { aiProvider, getImageFiles: listImages } = deps;
 
     const folder = typeof req.body?.folder === "string" ? req.body.folder : "";
     if (folder.trim().length === 0) {
@@ -193,8 +134,6 @@ export function createTranscribeHandler(deps: TranscriptionDeps) {
       return res.json({ folder, total: 0, processed: 0, skipped: 0, errors: 0, results });
     }
 
-    const { client, model } = await createClient();
-
     // Load custom instructions for this folder
     const customInstructionsPath = path.join(folder, "custom_instructions.txt");
     const customInstructions = fs.existsSync(customInstructionsPath)
@@ -222,9 +161,12 @@ export function createTranscribeHandler(deps: TranscriptionDeps) {
       sendSse(`[FILE_START] ${imageName}`);
       try {
         updateFileStatus(status, imagePath, "in_progress", undefined, statusFilePath);
-        const transcription = await runTranscription(client, model, imagePath, (message) => {
+        const transcriptionOptions = customInstructions
+          ? { extraInstructions: customInstructions }
+          : undefined;
+        const transcription = await aiProvider.transcribe(imagePath, transcriptionOptions, (message) => {
           sendSse(message);
-        }, customInstructions || undefined);
+        });
         // Save to the image folder so verification can find it
         saveVersionedTranscription(folder, imagePath, 1, transcription);
         updateFileStatus(status, imagePath, "completed", undefined, statusFilePath);
@@ -261,9 +203,9 @@ export function createTranscribeHandler(deps: TranscriptionDeps) {
   };
 }
 
-export function createReprocessHandler(deps: TranscriptionDeps) {
+export function createReprocessHandler(deps: AiProviderDeps) {
   return async (req: express.Request, res: express.Response) => {
-    const { createTranscriptionClient: createClient, transcribeImage: runTranscription } = deps;
+    const { aiProvider } = deps;
 
     const folder = typeof req.body?.folder === "string" ? req.body.folder : "";
     if (folder.trim().length === 0) {
@@ -302,6 +244,9 @@ export function createReprocessHandler(deps: TranscriptionDeps) {
 
     // Combine custom folder instructions with per-request extra instructions
     const combinedInstructions = [customInstructions, extraInstructions].filter(Boolean).join("\n\n") || undefined;
+    const reprocessOptions = combinedInstructions
+      ? { extraInstructions: combinedInstructions }
+      : undefined;
 
     const statusFilePath = path.join(folder, config.statusFile);
     const status = loadStatusFile(statusFilePath);
@@ -339,13 +284,11 @@ export function createReprocessHandler(deps: TranscriptionDeps) {
     };
 
     try {
-      const { client, model } = await createClient();
-
       sendSse(`[FILE_START] ${imageName}`);
 
-      const result = await runTranscription(client, model, imagePath, (message) => {
+      const result = await aiProvider.transcribe(imagePath, reprocessOptions, (message) => {
         sendSse(message);
-      }, combinedInstructions);
+      });
 
       saveVersionedTranscription(folder, imagePath, nextVersion, result);
 
@@ -389,8 +332,10 @@ export function createReprocessHandler(deps: TranscriptionDeps) {
   };
 }
 
-export function createSuggestNameHandler(deps: TranscriptionDeps) {
+export function createSuggestNameHandler(deps: AiProviderDeps) {
   return async (req: express.Request, res: express.Response) => {
+    const { aiProvider } = deps;
+
     const folder = typeof req.body?.folder === "string" ? req.body.folder : "";
     if (folder.trim().length === 0) {
       return res.status(400).json({ error: "Folder path is required." });
@@ -419,8 +364,7 @@ export function createSuggestNameHandler(deps: TranscriptionDeps) {
     }
 
     try {
-      const { client, model } = await deps.createTranscriptionClient();
-      const result = await deps.transcribeImage(client, model, imagePath);
+      const result = await aiProvider.transcribe(imagePath);
       return res.json({ suggestedFilename: result.suggestedFilename ?? "" });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -429,40 +373,9 @@ export function createSuggestNameHandler(deps: TranscriptionDeps) {
   };
 }
 
-export function createApp(overrides: Partial<TranscriptionDeps> & { healthDeps?: HealthDeps } = {}) {
-  const createClient = overrides.createTranscriptionClient ?? createTranscriptionClient;
-  const runTranscription = overrides.transcribeImage ?? transcribeImage;
-  const listImages = overrides.getImageFiles ?? getImageFiles;
-  const deps: TranscriptionDeps = {
-    createTranscriptionClient: createClient,
-    transcribeImage: runTranscription,
-    getImageFiles: listImages,
-  };
-
+export function createApp(deps: AiProviderDeps) {
   const app = express();
   app.use(express.json());
-
-  const healthDeps: HealthDeps = {
-    createClient: async () => {
-      const { LMStudioClient } = await import("@lmstudio/sdk");
-      return new LMStudioClient({ baseUrl: config.lmStudioBaseUrl });
-    },
-    listLoaded: async (client: unknown) => {
-      const c = client as { llm: { listLoaded: () => Promise<Array<{ identifier: string }>> } };
-      return c.llm.listLoaded();
-    },
-    listDownloaded: async (client: unknown) => {
-      const c = client as { system: { listDownloadedModels: (domain: string) => Promise<Array<{ modelKey: string }>> } };
-      return c.system.listDownloadedModels("llm");
-    },
-    loadModel: async (modelKey: string, client: unknown) => {
-      const c = client as { llm: { load: (key: string) => Promise<unknown> } };
-      return c.llm.load(modelKey);
-    },
-    modelName: config.modelName,
-  };
-
-  app.get("/api/health", createHealthHandler(overrides.healthDeps ?? healthDeps));
 
   app.get("/api/images", (req, res) => {
     const folder = req.query.folder;
@@ -478,7 +391,7 @@ export function createApp(overrides: Partial<TranscriptionDeps> & { healthDeps?:
       return res.status(400).json({ error: "Provided path is not a directory." });
     }
 
-    const imagePaths = listImages(folder).filter((filePath: string) => {
+    const imagePaths = deps.getImageFiles(folder).filter((filePath: string) => {
       return supportedExtensions.has(path.extname(filePath).toLowerCase());
     });
 
@@ -504,7 +417,7 @@ export function createApp(overrides: Partial<TranscriptionDeps> & { healthDeps?:
       return res.status(400).json({ error: "Provided path is not a directory." });
     }
 
-    const imagePaths = listImages(folder);
+    const imagePaths = deps.getImageFiles(folder);
     const statusFilePath = path.join(folder, config.statusFile);
     const status = loadStatusFile(statusFilePath);
     const scopedStatus: StatusFile = {};
@@ -839,7 +752,7 @@ export function createApp(overrides: Partial<TranscriptionDeps> & { healthDeps?:
       return res.status(400).json({ error: "Provided path is not a directory." });
     }
 
-    const imagePaths = listImages(folder);
+    const imagePaths = deps.getImageFiles(folder);
     const statusFilePath = path.join(folder, config.statusFile);
     const status = loadStatusFile(statusFilePath);
 

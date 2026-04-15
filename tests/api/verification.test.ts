@@ -4,6 +4,7 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 import { createApp } from "../../server/app";
+import { createTestDeps } from "../helpers";
 
 function createTempDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "sandcastle-verification-"));
@@ -40,7 +41,7 @@ describe("GET /api/transcription/:imageName", () => {
     const mdContent = "# Slide 001\n\n## Description\n\nA test slide.\n";
     fs.writeFileSync(path.join(tempDir, "slide_001.md"), mdContent);
 
-    const app = createApp();
+    const app = createApp(createTestDeps());
     const res = await invokeApp(app, {
       method: "GET",
       url: `/api/transcription/slide_001.jpg`,
@@ -55,7 +56,7 @@ describe("GET /api/transcription/:imageName", () => {
   });
 
   it("returns 404 when no transcription file exists", async () => {
-    const app = createApp();
+    const app = createApp(createTestDeps());
     const res = await invokeApp(app, {
       method: "GET",
       url: `/api/transcription/slide_002.png`,
@@ -69,7 +70,7 @@ describe("GET /api/transcription/:imageName", () => {
   });
 
   it("returns 400 when folder is missing", async () => {
-    const app = createApp();
+    const app = createApp(createTestDeps());
     const res = await invokeApp(app, {
       method: "GET",
       url: `/api/transcription/slide_001.jpg`,
@@ -94,7 +95,7 @@ describe("GET /api/transcription/:imageName", () => {
     };
     fs.writeFileSync(statusFile, JSON.stringify(status, null, 2));
 
-    const app = createApp();
+    const app = createApp(createTestDeps());
     const res = await invokeApp(app, {
       method: "GET",
       url: `/api/transcription/slide_001.jpg`,
@@ -126,7 +127,7 @@ describe("PUT /api/transcription/:imageName", () => {
     fs.writeFileSync(path.join(tempDir, "slide_001.md"), originalContent);
 
     const newContent = "# Slide 001\n\n## Description\n\nEdited description.\n";
-    const app = createApp();
+    const app = createApp(createTestDeps());
     const res = await invokeApp(app, {
       method: "PUT",
       url: `/api/transcription/slide_001.jpg`,
@@ -158,7 +159,7 @@ describe("PUT /api/transcription/:imageName", () => {
     fs.writeFileSync(statusFile, JSON.stringify(status, null, 2));
 
     const newContent = "# Slide 001 v2 edited\n";
-    const app = createApp();
+    const app = createApp(createTestDeps());
     const res = await invokeApp(app, {
       method: "PUT",
       url: `/api/transcription/slide_001.jpg`,
@@ -176,7 +177,7 @@ describe("PUT /api/transcription/:imageName", () => {
   });
 
   it("returns 404 when transcription file does not exist", async () => {
-    const app = createApp();
+    const app = createApp(createTestDeps());
     const res = await invokeApp(app, {
       method: "PUT",
       url: `/api/transcription/slide_001.jpg`,
@@ -190,7 +191,7 @@ describe("PUT /api/transcription/:imageName", () => {
   });
 
   it("returns 400 when folder is missing", async () => {
-    const app = createApp();
+    const app = createApp(createTestDeps());
     const res = await invokeApp(app, {
       method: "PUT",
       url: `/api/transcription/slide_001.jpg`,
@@ -202,7 +203,7 @@ describe("PUT /api/transcription/:imageName", () => {
   });
 
   it("returns 400 when content is missing", async () => {
-    const app = createApp();
+    const app = createApp(createTestDeps());
     const res = await invokeApp(app, {
       method: "PUT",
       url: `/api/transcription/slide_001.jpg`,
@@ -216,7 +217,7 @@ describe("PUT /api/transcription/:imageName", () => {
   });
 
   it("rejects image names with path separators", async () => {
-    const app = createApp();
+    const app = createApp(createTestDeps());
     const res = await invokeApp(app, {
       method: "PUT",
       url: `/api/transcription/..%2Fetc%2Fpasswd`,
@@ -245,7 +246,7 @@ describe("GET /api/image/:imageName", () => {
   });
 
   it("serves the image file", async () => {
-    const app = createApp();
+    const app = createApp(createTestDeps());
     const res = await invokeApp(app, {
       method: "GET",
       url: `/api/image/slide_001.jpg`,
@@ -257,7 +258,7 @@ describe("GET /api/image/:imageName", () => {
   });
 
   it("returns 404 for nonexistent image", async () => {
-    const app = createApp();
+    const app = createApp(createTestDeps());
     const res = await invokeApp(app, {
       method: "GET",
       url: `/api/image/missing.jpg`,
@@ -269,7 +270,7 @@ describe("GET /api/image/:imageName", () => {
   });
 
   it("rejects image names containing path separators", async () => {
-    const app = createApp();
+    const app = createApp(createTestDeps());
     const res = await invokeApp(app, {
       method: "GET",
       url: `/api/image/..%2Fetc%2Fpasswd`,

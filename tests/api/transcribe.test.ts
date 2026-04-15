@@ -3,10 +3,17 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 import { createMocks } from "node-mocks-http";
-import { createTranscribeHandler, type TranscriptionDeps } from "../../server/app";
+import { createTranscribeHandler, type AiProviderDeps } from "../../server/app";
+import type { AiProvider, TranscriptionResult } from "../../src/ai-provider";
 
-const transcribeImageMock = vi.fn();
-const createTranscriptionClientMock = vi.fn();
+const aiProviderMock = {
+  initialize: vi.fn(),
+  transcribe: vi.fn(),
+  getAvailableModels: vi.fn(),
+  getCurrentModel: vi.fn(),
+  setModel: vi.fn(),
+  dispose: vi.fn(),
+} satisfies AiProvider;
 
 function createTempDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "sandcastle-transcribe-"));
@@ -14,9 +21,8 @@ function createTempDir(): string {
 
 async function invokeTranscribe(folder: string, acceptHeader?: string) {
   const supportedExtensions = new Set([".jpg", ".jpeg", ".png", ".webp"]);
-  const deps: TranscriptionDeps = {
-    createTranscriptionClient: createTranscriptionClientMock,
-    transcribeImage: transcribeImageMock,
+  const deps: AiProviderDeps = {
+    aiProvider: aiProviderMock,
     getImageFiles: (dir: string) => {
       const entries = fs.readdirSync(dir);
       return entries
@@ -47,17 +53,15 @@ describe("POST /api/transcribe", () => {
     tempDir = createTempDir();
     fs.writeFileSync(path.join(tempDir, "one.jpg"), "");
     fs.writeFileSync(path.join(tempDir, "two.png"), "");
-    createTranscriptionClientMock.mockResolvedValue({ client: {}, model: {} });
-    transcribeImageMock.mockImplementation(async (_client, _model, imagePath, onProgress) => {
-      onProgress?.(`[mock] ${path.basename(imagePath)}`);
+    aiProviderMock.transcribe.mockImplementation(async (_imagePath: string, _options?: { extraInstructions?: string }, onDelta?: (text: string) => void) => {
+      onDelta?.("[mock] progress");
       return { description: "desc", textContent: "text", keyInformation: [] };
     });
   });
 
   afterEach(() => {
     fs.rmSync(tempDir, { recursive: true, force: true });
-    transcribeImageMock.mockReset();
-    createTranscriptionClientMock.mockReset();
+    aiProviderMock.transcribe.mockReset();
   });
 
   it("skips completed images and updates status for pending ones", async () => {
@@ -80,8 +84,8 @@ describe("POST /api/transcribe", () => {
     expect(body.skipped).toBe(1);
     expect(body.errors).toBe(0);
 
-    expect(transcribeImageMock).toHaveBeenCalledTimes(1);
-    expect(transcribeImageMock.mock.calls[0][2]).toBe(path.join(tempDir, "two.png"));
+    expect(aiProviderMock.transcribe).toHaveBeenCalledTimes(1);
+    expect(aiProviderMock.transcribe.mock.calls[0][0]).toBe(path.join(tempDir, "two.png"));
 
     const updated = JSON.parse(fs.readFileSync(statusPath, "utf-8"));
     expect(updated[path.join(tempDir, "two.png")].processingStatus).toBe("completed");
@@ -99,7 +103,7 @@ describe("POST /api/transcribe", () => {
     expect(data).toContain("data: [DONE]");
   });
 
-  it("passes custom instructions from folder to transcribeImage", async () => {
+  it("passes custom instructions from folder to transcribe", async () => {
     fs.writeFileSync(path.join(tempDir, "custom_instructions.txt"), "These are CAFI slides");
 
     // Remove one image so only one call
@@ -108,9 +112,9 @@ describe("POST /api/transcribe", () => {
     const response = await invokeTranscribe(tempDir);
 
     expect(response._getStatusCode()).toBe(200);
-    expect(transcribeImageMock).toHaveBeenCalledTimes(1);
-    // 5th argument is extraInstructions
-    expect(transcribeImageMock.mock.calls[0][4]).toBe("These are CAFI slides");
+    expect(aiProviderMock.transcribe).toHaveBeenCalledTimes(1);
+    // Second argument is options object with extraInstructions
+    expect(aiProviderMock.transcribe.mock.calls[0][1]).toEqual({ extraInstructions: "These are CAFI slides" });
   });
 
   it("does not pass extraInstructions when no custom_instructions.txt exists", async () => {
@@ -119,7 +123,7 @@ describe("POST /api/transcribe", () => {
     const response = await invokeTranscribe(tempDir);
 
     expect(response._getStatusCode()).toBe(200);
-    expect(transcribeImageMock).toHaveBeenCalledTimes(1);
-    expect(transcribeImageMock.mock.calls[0][4]).toBeUndefined();
+    expect(aiProviderMock.transcribe).toHaveBeenCalledTimes(1);
+    expect(aiProviderMock.transcribe.mock.calls[0][1]).toBeUndefined();
   });
 });

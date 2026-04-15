@@ -4,6 +4,7 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 import { createApp } from "../../server/app";
+import { createTestDeps } from "../helpers";
 
 function createTempDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "sandcastle-review-csv-"));
@@ -48,7 +49,7 @@ describe("PATCH /api/review/:imageName", () => {
     };
     fs.writeFileSync(statusPath, JSON.stringify(status, null, 2));
 
-    const app = createApp();
+    const app = createApp(createTestDeps());
     const res = await invokeApp(app, {
       method: "PATCH",
       url: `/api/review/slide_001.jpg`,
@@ -75,7 +76,7 @@ describe("PATCH /api/review/:imageName", () => {
     };
     fs.writeFileSync(statusPath, JSON.stringify(status, null, 2));
 
-    const app = createApp();
+    const app = createApp(createTestDeps());
     const res = await invokeApp(app, {
       method: "PATCH",
       url: `/api/review/slide_001.jpg`,
@@ -106,7 +107,7 @@ describe("PATCH /api/review/:imageName", () => {
     };
     fs.writeFileSync(statusPath, JSON.stringify(status, null, 2));
 
-    const app = createApp();
+    const app = createApp(createTestDeps());
     await invokeApp(app, {
       method: "PATCH",
       url: `/api/review/slide_001.jpg`,
@@ -120,7 +121,7 @@ describe("PATCH /api/review/:imageName", () => {
   });
 
   it("returns 400 for invalid reviewStatus", async () => {
-    const app = createApp();
+    const app = createApp(createTestDeps());
     const res = await invokeApp(app, {
       method: "PATCH",
       url: `/api/review/slide_001.jpg`,
@@ -133,7 +134,7 @@ describe("PATCH /api/review/:imageName", () => {
   });
 
   it("returns 400 when reviewStatus is missing", async () => {
-    const app = createApp();
+    const app = createApp(createTestDeps());
     const res = await invokeApp(app, {
       method: "PATCH",
       url: `/api/review/slide_001.jpg`,
@@ -176,7 +177,7 @@ describe("GET /api/csv", () => {
     };
     fs.writeFileSync(statusPath, JSON.stringify(status, null, 2));
 
-    const app = createApp();
+    const app = createApp(createTestDeps());
     const res = await invokeApp(app, {
       method: "GET",
       url: `/api/csv`,
@@ -200,7 +201,7 @@ describe("GET /api/csv", () => {
   });
 
   it("returns 400 when folder is missing", async () => {
-    const app = createApp();
+    const app = createApp(createTestDeps());
     const res = await invokeApp(app, {
       method: "GET",
       url: `/api/csv`,
@@ -211,7 +212,7 @@ describe("GET /api/csv", () => {
   });
 
   it("returns CSV with empty data when no status file exists", async () => {
-    const app = createApp();
+    const app = createApp(createTestDeps());
     const res = await invokeApp(app, {
       method: "GET",
       url: `/api/csv`,

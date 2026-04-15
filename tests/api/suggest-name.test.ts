@@ -3,19 +3,25 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 import { createMocks } from "node-mocks-http";
-import { createSuggestNameHandler, type TranscriptionDeps } from "../../server/app";
+import { createSuggestNameHandler, type AiProviderDeps } from "../../server/app";
+import type { AiProvider } from "../../src/ai-provider";
+
+const aiProviderMock = {
+  initialize: vi.fn(),
+  transcribe: vi.fn(),
+  getAvailableModels: vi.fn(),
+  getCurrentModel: vi.fn(),
+  setModel: vi.fn(),
+  dispose: vi.fn(),
+} satisfies AiProvider;
 
 function createTempDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "sandcastle-suggest-"));
 }
 
-const transcribeImageMock = vi.fn();
-const createTranscriptionClientMock = vi.fn();
-
-function createDeps(): TranscriptionDeps {
+function createDeps(): AiProviderDeps {
   return {
-    createTranscriptionClient: createTranscriptionClientMock,
-    transcribeImage: transcribeImageMock,
+    aiProvider: aiProviderMock,
     getImageFiles: () => [],
   };
 }
@@ -39,17 +45,15 @@ describe("POST /api/suggest-name/:imageName", () => {
   beforeEach(() => {
     tempDir = createTempDir();
     fs.writeFileSync(path.join(tempDir, "IMG_001.jpg"), "image-data");
-    createTranscriptionClientMock.mockResolvedValue({ client: {}, model: {} });
   });
 
   afterEach(() => {
     fs.rmSync(tempDir, { recursive: true, force: true });
-    transcribeImageMock.mockReset();
-    createTranscriptionClientMock.mockReset();
+    aiProviderMock.transcribe.mockReset();
   });
 
   it("returns a suggested filename from the model", async () => {
-    transcribeImageMock.mockResolvedValue({
+    aiProviderMock.transcribe.mockResolvedValue({
       description: "desc",
       textContent: "text",
       keyInformation: [],
@@ -74,8 +78,7 @@ describe("POST /api/suggest-name/:imageName", () => {
   });
 
   it("returns 500 when model call fails", async () => {
-    createTranscriptionClientMock.mockResolvedValue({ client: {}, model: {} });
-    transcribeImageMock.mockRejectedValue(new Error("Model not loaded"));
+    aiProviderMock.transcribe.mockRejectedValue(new Error("Model not loaded"));
 
     const res = await invokeSuggestName(tempDir, "IMG_001.jpg");
     expect(res._getStatusCode()).toBe(500);
