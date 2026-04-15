@@ -4,6 +4,7 @@ import { config } from "./config";
 import {
   loadStatusFile,
   updateFileStatus,
+  saveVersionedTranscription,
   type StatusFile,
 } from "./storage";
 import { getImageFiles } from "./transcription";
@@ -43,7 +44,8 @@ async function main() {
     process.exit(0);
   }
 
-  const status = loadStatusFile();
+  const statusFilePath = path.join(config.imageDir, config.statusFile);
+  const status = loadStatusFile(statusFilePath);
   let filesToProcess: string[];
 
   if (mode === "all") {
@@ -96,12 +98,13 @@ async function main() {
       const result = await aiProvider.transcribe(imagePath, undefined, (delta) => {
         process.stdout.write(delta);
       });
-      updateFileStatus(status, imagePath, "completed");
+      saveVersionedTranscription(config.imageDir, imagePath, 1, result);
+      updateFileStatus(status, imagePath, "completed", undefined, statusFilePath);
       completed++;
       console.log(`\n  [Done: ${imageName}]`);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      updateFileStatus(status, imagePath, "error", errorMessage);
+      updateFileStatus(status, imagePath, "error", errorMessage, statusFilePath);
       console.error(`  [ERROR] ${errorMessage}`);
       errors++;
     }
@@ -112,7 +115,7 @@ async function main() {
   const total = imageFiles.length;
   console.log(`\n--- Done ---`);
   console.log(`Completed: ${completed}, Errors: ${errors}, Skipped: ${skipped}, Total: ${total}`);
-  console.log(`Status file: ${config.statusFile}`);
+  console.log(`Status file: ${statusFilePath}`);
   console.log(`Transcriptions: ${config.outputDir}/`);
 }
 
