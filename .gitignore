@@ -10,3 +10,10 @@ dist/
 !tsconfig.*.json
 !web/tsconfig.json
 *.md
+
+# Local artifacts & tool folders
+.DS_Store
+.sandcastle/
+.shellscripts/
+.claude/
+skills/

@@ -64,7 +64,7 @@ export default function App() {
   const justVerifiedRef = useRef(false);
 
   const canRun = images.length > 0 && loadState === "success" && currentModel !== null;
-  const hasCompleted = processingState === "done";
+  const hasCompleted = processingState === "done" && processingEntries.length > 0 && processingEntries.every((entry) => entry.status === "completed" || entry.status === "skipped" || entry.status === "error");
 
   const displayList = useMemo(() => {
     return images.map((image) => image.name);
@@ -661,6 +661,8 @@ export default function App() {
   }
 
   function handleStreamEvent(eventType: string, data: Record<string, unknown>) {
+    console.log(`[client SSE] handleStreamEvent: ${eventType}`, data);
+
     if (eventType === "file_start") {
       const name = data.name as string;
       setCurrentFile(name);
@@ -732,12 +734,21 @@ export default function App() {
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
+      let chunkIdx = 0;
+      let streamDone = false;
+
+      console.log(`[client SSE] starting to read stream`);
 
       while (true) {
         const { value, done } = await reader.read();
         if (done) {
+          console.log(`[client SSE] reader.read() returned done after ${chunkIdx} chunks`);
           break;
         }
+        chunkIdx++;
+        const rawLen = value?.length ?? 0;
+        const rawPreview = value ? new TextDecoder().decode(value).replace(/\n/g, "\\n").slice(0, 150) : "";
+        console.log(`[client SSE] chunk #${chunkIdx}: ${rawLen}b → ${rawPreview}`);
         buffer += decoder.decode(value, { stream: true });
         const events = buffer.split("\n\n");
         buffer = events.pop() ?? "";
@@ -755,6 +766,7 @@ export default function App() {
           if (!eventType) continue;
 
           if (eventType === "done") {
+            streamDone = true;
             setProcessingState("done");
             return;
           }
@@ -768,11 +780,24 @@ export default function App() {
         }
       }
 
+      // If we got here, the stream ended WITHOUT a "done" event.
+      // This means the server disconnected or crashed. Do NOT mark as done
+      // unless every entry already reached a terminal state.
+      if (!streamDone) {
+        setProcessingEntries((prev) => {
+          const allSettled = prev.every(
+            (e) => e.status === "completed" || e.status === "skipped" || e.status === "error"
+          );
+          if (allSettled) {
+            setProcessingState("done");
+          }
+          return prev;
+        });
+      }
+
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to run transcription.";
       setProcessingError(message);
-    } finally {
-      setProcessingState("done");
     }
   }
 

@@ -75,6 +75,7 @@ export function createTranscribeHandler(deps: AiProviderDeps) {
     }
 
     const stream = createSseStream(req, res);
+    console.log(`[transcribe] SSE stream created: ${stream ? "yes" : "no"} (accept: ${req.headers.accept})`);
 
     const imagePaths = listImages(folder);
     const statusFilePath = path.join(folder, config.statusFile);
@@ -113,8 +114,13 @@ export function createTranscribeHandler(deps: AiProviderDeps) {
       ? fs.readFileSync(customInstructionsPath, "utf-8").trim()
       : "";
 
-    for (const imagePath of imagePaths) {
+    console.log(`[transcribe] starting loop over ${imagePaths.length} images`);
+    for (let i = 0; i < imagePaths.length; i++) {
+      const imagePath = imagePaths[i];
+      console.log(`[transcribe] === LOOP i=${i}/${imagePaths.length} path=${imagePath} ===`);
+
       if (stream?.isClosed) {
+        console.log(`[transcribe] stream closed, stopping at ${imagePath}`);
         break;
       }
 
@@ -122,21 +128,29 @@ export function createTranscribeHandler(deps: AiProviderDeps) {
       if (status[imagePath]?.processingStatus === "completed") {
         skipped++;
         results.push({ imageName, status: "skipped" });
+        console.log(`[transcribe] skipping already-completed: ${imageName}`);
         stream?.emit("file_skip", { name: imageName });
         continue;
       }
 
+      console.log(`[transcribe] emitting file_start for ${imageName}`);
       stream?.emit("file_start", { name: imageName });
+      console.log(`[transcribe] file_start emitted, entering try block`);
+
       try {
         updateFileStatus(status, imagePath, "in_progress", undefined, statusFilePath);
         const transcriptionOptions = customInstructions
           ? { extraInstructions: customInstructions }
           : undefined;
+        console.log(`[transcribe] awaiting aiProvider.transcribe for ${imageName}...`);
         const transcription = await aiProvider.transcribe(imagePath, transcriptionOptions, (delta) => {
+          console.log(`[transcribe] delta for ${imageName}: ${delta.length} chars`);
           stream?.emit("delta", { text: delta });
         });
-        // Save to the image folder so verification can find it
+        console.log(`[transcribe] aiProvider.transcribe RESOLVED for ${imageName}`);
+        console.log(`[transcribe] saving transcription for ${imageName}`);
         saveVersionedTranscription(folder, imagePath, 1, transcription);
+        console.log(`[transcribe] updating file status to completed for ${imageName}`);
         updateFileStatus(status, imagePath, "completed", undefined, statusFilePath);
         if (transcription.suggestedFilename) {
           status[imagePath].suggestedFilename = transcription.suggestedFilename;
@@ -144,9 +158,12 @@ export function createTranscribeHandler(deps: AiProviderDeps) {
         }
         completed++;
         results.push({ imageName, status: "completed" });
+        console.log(`[transcribe] emitting file_done for ${imageName}`);
         stream?.emit("file_done", { name: imageName });
+        console.log(`[transcribe] file_done emitted for ${imageName}, loop will continue to i=${i + 1}`);
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
+        console.log(`[transcribe] error for ${imageName}: ${errorMessage}`);
         updateFileStatus(status, imagePath, "error", errorMessage, statusFilePath);
         errors++;
         results.push({ imageName, status: "error", error: errorMessage });
@@ -155,6 +172,7 @@ export function createTranscribeHandler(deps: AiProviderDeps) {
     }
 
     if (stream) {
+      console.log(`[transcribe] all done. completed=${completed} skipped=${skipped} errors=${errors}`);
       stream.emit("done");
       stream.close();
       return;

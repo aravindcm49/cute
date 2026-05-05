@@ -113,6 +113,53 @@ describe("POST /api/transcribe", () => {
     expect(data).toContain("data: {}");
   });
 
+  it("continues streaming after request close event (regression: do not stop after first image)", async () => {
+    const supportedExtensions = new Set([".jpg", ".jpeg", ".png", ".webp"]);
+    const deps: AiProviderDeps = {
+      aiProvider: aiProviderMock,
+      getImageFiles: (dir: string) => {
+        const entries = fs.readdirSync(dir);
+        return entries
+          .filter((entry) => supportedExtensions.has(path.extname(entry).toLowerCase()))
+          .map((entry) => path.join(dir, entry));
+      },
+    };
+
+    const handler = createTranscribeHandler(deps);
+    const { req, res } = createMocks({
+      method: "POST",
+      url: "/api/transcribe",
+      headers: {
+        "content-type": "application/json",
+        accept: "text/event-stream",
+      },
+      body: { folder: tempDir },
+    });
+
+    let calls = 0;
+    aiProviderMock.transcribe.mockImplementation(async (_imagePath: string, _options?: { extraInstructions?: string }, onDelta?: (text: string) => void) => {
+      calls += 1;
+      onDelta?.(`mock progress ${calls}`);
+      if (calls === 1) {
+        // In real POST+SSE requests, req close can happen after request body is read.
+        // This must NOT terminate the response SSE stream.
+        req.emit("close");
+      }
+      return { description: "desc", textContent: "text", keyInformation: [] };
+    });
+
+    await handler(req, res);
+
+    expect(calls).toBe(2);
+    expect(res._getStatusCode()).toBe(200);
+    const data = res._getData();
+    expect(data).toContain("event: file_start");
+    expect(data).toContain(`data: {"name":"one.jpg"}`);
+    expect(data).toContain(`data: {"name":"two.png"}`);
+    expect((data.match(/event: file_done/g) ?? []).length).toBe(2);
+    expect(data).toContain("event: done");
+  });
+
   it("passes custom instructions from folder to transcribe", async () => {
     fs.writeFileSync(path.join(tempDir, "custom_instructions.txt"), "These are CAFI slides");
 

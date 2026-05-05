@@ -123,19 +123,42 @@ export function createAiProvider(options?: {
       }
 
       let responseText = "";
+      let deltaCount = 0;
+      let lastDeltaAt = Date.now();
 
       const unsubscribe = session.subscribe((event) => {
+        // Log ALL event types to diagnose hang
+        const subType = event.type === "message_update" ? event.assistantMessageEvent.type : "";
+        console.log(`[ai-provider] session event: type=${event.type} subType=${subType}`);
+
         if (event.type === "message_update" && event.assistantMessageEvent.type === "text_delta") {
           const delta = event.assistantMessageEvent.delta;
+          deltaCount++;
+          lastDeltaAt = Date.now();
+          if (deltaCount <= 3 || deltaCount % 50 === 0) {
+            console.log(`[ai-provider] delta #${deltaCount}: ${delta.length} chars, total so far: ${responseText.length}`);
+          }
           responseText += delta;
           onDelta?.(delta);
         }
       });
 
       try {
+        console.log(`[ai-provider] calling session.prompt for ${imagePath}...`);
+        console.log(`[ai-provider] awaiting session.prompt — will log if/when it resolves`);
+
+        // Watchdog: if deltas stopped arriving but prompt hasn't resolved, log it
+        const watchdog = setInterval(() => {
+          const sinceLast = Date.now() - lastDeltaAt;
+          console.log(`[ai-provider] WATCHDOG: prompt still awaiting for ${imagePath}. deltas: ${deltaCount}, lastDeltaAgo: ${sinceLast}ms, responseLen: ${responseText.length}`);
+        }, 10_000);
+
         await session.prompt(promptText, { images: [imageContent] });
+        clearInterval(watchdog);
+        console.log(`[ai-provider] session.prompt RESOLVED for ${imagePath}. deltas: ${deltaCount}, total response: ${responseText.length} chars, lastDeltaAgo: ${Date.now() - lastDeltaAt}ms`);
       } finally {
         unsubscribe();
+        console.log(`[ai-provider] unsubscribed from session events for ${imagePath}`);
       }
 
       // Parse the response — best effort JSON extraction

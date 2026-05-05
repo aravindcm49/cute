@@ -136,28 +136,37 @@ describe("createSseStream", () => {
     expect(data).not.toContain("after");
   });
 
-  it("isClosed becomes true when client disconnects", () => {
+  it("isClosed becomes true when request is aborted", () => {
     const { req, res } = createMockRequestResponse("text/event-stream");
     const stream = createSseStream(req, res);
 
     expect(stream!.isClosed).toBe(false);
 
-    // Simulate client disconnect by emitting the "close" event
-    req.emit("close");
+    // Simulate client disconnect via request abort
+    req.emit("aborted");
 
     expect(stream!.isClosed).toBe(true);
   });
 
-  it("emit does not write after client disconnects", () => {
+  it("emit does not write after request is aborted", () => {
     const { req, res } = createMockRequestResponse("text/event-stream");
     const stream = createSseStream(req, res);
 
     stream!.emit("delta", { text: "before" });
-    req.emit("close");
+    req.emit("aborted");
     stream!.emit("delta", { text: "after" });
 
     const data = res._getData();
     expect(data).toContain("before");
     expect(data).not.toContain("after");
+  });
+
+  it("request close alone does not close SSE stream", () => {
+    const { req, res } = createMockRequestResponse("text/event-stream");
+    const stream = createSseStream(req, res);
+
+    req.emit("close");
+
+    expect(stream!.isClosed).toBe(false);
   });
 });

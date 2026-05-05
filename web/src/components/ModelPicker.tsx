@@ -31,6 +31,7 @@ export function ModelPicker({
       const data: ModelsResponse = await res.json();
       setModels(data.models);
       setCurrentModel(data.current);
+      onModelChange?.(data.current);
       setError(null);
     } catch {
       setError("Failed to load models.");
